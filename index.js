@@ -1367,7 +1367,7 @@ async function handleAdminRequest(request, env, ctx, adminPrefix) {
   const adminSubPath = url.pathname.substring(adminBasePath.length) || '/';
 
   if (adminSubPath.startsWith('/api/')) {
-    if (!(await isAdmin(request, env)) {
+    if (!(await isAdmin(request, env))) {
       const headers = new Headers(jsonHeader);
       addSecurityHeaders(headers, null, {});
       return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers });
