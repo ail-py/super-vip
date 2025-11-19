@@ -4018,6 +4018,15 @@ export default {
       }), { status: 200, headers });
     }
 
+    if (url.pathname === '/favicon.ico') {
+      return new Response(null, {
+        status: 301,
+        headers: {
+          Location: 'https://www.google.com/favicon.ico'
+        }
+      });
+    }
+
     const upgradeHeader = request.headers.get('Upgrade');
     if (upgradeHeader?.toLowerCase() === 'websocket') {
       if (!env.DB) {
