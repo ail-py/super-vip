@@ -1774,8 +1774,20 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   const clientIsp = clientGeo.isp || 'Detection failed';
 
   const proxyHost = proxyAddress.split(':')[0];
-  const proxyIP = await resolveProxyIP(proxyHost);
-  const proxyGeo = await getGeo(proxyIP);
+  let proxyIP;
+  try {
+    proxyIP = await resolveProxyIP(proxyHost);
+  } catch (e) {
+    console.error(`Failed to resolve proxy IP: ${e.message}`);
+    proxyIP = proxyHost;
+  }
+  let proxyGeo;
+  try {
+    proxyGeo = await getGeo(proxyIP);
+  } catch (e) {
+    console.error(`Failed to get proxy geo: ${e.message}`);
+    proxyGeo = { city: '', country: '', isp: '' };
+  }
   const proxyLocation = [proxyGeo.city, proxyGeo.country].filter(Boolean).join(', ') || 'Detection failed';
 
   // Pre-compute async values
@@ -3961,258 +3973,256 @@ async function performHealthCheck(env, ctx) {
 
 export default {
   async fetch(request, env, ctx) {
-    let cfg;
-    
     try {
-      cfg = await Config.fromEnv(env);
-    } catch (err) {
-      console.error(`Configuration Error: ${err.message}`);
-      const headers = new Headers();
-      addSecurityHeaders(headers, null, {});
-      return new Response(`Configuration Error: ${err.message}`, { status: 503, headers });
-    }
+      const cfg = await Config.fromEnv(env);
 
-    const url = new URL(request.url);
-    const clientIp = request.headers.get('CF-Connecting-IP');
+      const url = new URL(request.url);
+      const clientIp = request.headers.get('CF-Connecting-IP');
 
-    const adminPrefix = env.ADMIN_PATH_PREFIX || 'admin';
-    
-    if (url.pathname.startsWith(`/${adminPrefix}/`)) {
-      return await handleAdminRequest(request, env, ctx, adminPrefix);
-    }
-
-    if (url.pathname === '/health') {
-      const headers = new Headers();
-      addSecurityHeaders(headers, null, {});
-      return new Response('OK', { status: 200, headers });
-    }
-
-    // Health Check Endpoint for Cron
-    if (url.pathname === '/health-check' && request.method === 'GET') {
-      await performHealthCheck(env, ctx);
-      const headers = new Headers();
-      addSecurityHeaders(headers, null, {});
-      return new Response('Health check performed', { status: 200, headers });
-    }
-
-    if (url.pathname.startsWith('/api/user/')) {
-      const uuid = url.pathname.substring('/api/user/'.length);
-      const headers = new Headers({ 'Content-Type': 'application/json' });
-      addSecurityHeaders(headers, null, {});
-      if (request.method !== 'GET') {
-        return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { status: 405, headers });
+      const adminPrefix = env.ADMIN_PATH_PREFIX || 'admin';
+      
+      if (url.pathname.startsWith(`/${adminPrefix}/`)) {
+        return await handleAdminRequest(request, env, ctx, adminPrefix);
       }
-      if (!isValidUUID(uuid)) {
-        return new Response(JSON.stringify({ error: 'Invalid UUID' }), { status: 400, headers });
-      }
-      const userData = await getUserData(env, uuid, ctx);
-      if (!userData) {
-        return new Response(JSON.stringify({ error: 'Authentication failed' }), { status: 403, headers });
-      }
-      return new Response(JSON.stringify({
-        traffic_used: userData.traffic_used || 0,
-        traffic_limit: userData.traffic_limit,
-        expiration_date: userData.expiration_date,
-        expiration_time: userData.expiration_time
-      }), { status: 200, headers });
-    }
 
-    if (url.pathname === '/favicon.ico') {
-      return new Response(null, {
-        status: 301,
-        headers: {
-          Location: 'https://www.google.com/favicon.ico'
+      if (url.pathname === '/health') {
+        const headers = new Headers();
+        addSecurityHeaders(headers, null, {});
+        return new Response('OK', { status: 200, headers });
+      }
+
+      // Health Check Endpoint for Cron
+      if (url.pathname === '/health-check' && request.method === 'GET') {
+        await performHealthCheck(env, ctx);
+        const headers = new Headers();
+        addSecurityHeaders(headers, null, {});
+        return new Response('Health check performed', { status: 200, headers });
+      }
+
+      if (url.pathname.startsWith('/api/user/')) {
+        const uuid = url.pathname.substring('/api/user/'.length);
+        const headers = new Headers({ 'Content-Type': 'application/json' });
+        addSecurityHeaders(headers, null, {});
+        if (request.method !== 'GET') {
+          return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { status: 405, headers });
         }
-      });
-    }
-
-    const upgradeHeader = request.headers.get('Upgrade');
-    if (upgradeHeader?.toLowerCase() === 'websocket') {
-      if (!env.DB) {
-        const headers = new Headers();
-        addSecurityHeaders(headers, null, {});
-        return new Response('Service not configured properly', { status: 503, headers });
-      }
-      
-      // Domain Fronting: Set random Host header from HOST_HEADERS
-      const hostHeaders = env.HOST_HEADERS ? env.HOST_HEADERS.split(',').map(h => h.trim()) : ['speed.cloudflare.com'];
-      const evasionHost = pick(hostHeaders);
-      const newHeaders = new Headers(request.headers);
-      newHeaders.set('Host', evasionHost);
-      const newRequest = new Request(request, { headers: newHeaders });
-      
-      const requestConfig = {
-        userID: cfg.userID,
-        proxyIP: cfg.proxyIP,
-        proxyPort: cfg.proxyPort,
-        socks5Address: cfg.socks5.address,
-        socks5Relay: cfg.socks5.relayMode,
-        enableSocks: cfg.socks5.enabled,
-        parsedSocks5Address: cfg.socks5.enabled ? socks5AddressParser(cfg.socks5.address) : {},
-        scamalytics: cfg.scamalytics,
-      };
-      
-      const wsResponse = await ProtocolOverWSHandler(newRequest, requestConfig, env, ctx);
-      
-      const headers = new Headers(wsResponse.headers);
-      addSecurityHeaders(headers, null, {});
-      
-      return new Response(wsResponse.body, { status: wsResponse.status, webSocket: wsResponse.webSocket, headers });
-    }
-
-    const handleSubscription = async (core) => {
-      const rateLimitKey = `user_path_rate:${clientIp}`;
-      if (await checkRateLimit(env.DB, rateLimitKey, CONST.USER_PATH_RATE_LIMIT, CONST.USER_PATH_RATE_TTL)) {
-        const headers = new Headers();
-        addSecurityHeaders(headers, null, {});
-        return new Response('Rate limit exceeded', { status: 429, headers });
+        if (!isValidUUID(uuid)) {
+          return new Response(JSON.stringify({ error: 'Invalid UUID' }), { status: 400, headers });
+        }
+        const userData = await getUserData(env, uuid, ctx);
+        if (!userData) {
+          return new Response(JSON.stringify({ error: 'Authentication failed' }), { status: 403, headers });
+        }
+        return new Response(JSON.stringify({
+          traffic_used: userData.traffic_used || 0,
+          traffic_limit: userData.traffic_limit,
+          expiration_date: userData.expiration_date,
+          expiration_time: userData.expiration_time
+        }), { status: 200, headers });
       }
 
-      const uuid = url.pathname.substring(`/${core}/`.length);
-      if (!isValidUUID(uuid)) {
-        const headers = new Headers();
-        addSecurityHeaders(headers, null, {});
-        return new Response('Invalid UUID', { status: 400, headers });
-      }
-      
-      const userData = await getUserData(env, uuid, ctx);
-      if (!userData) {
-        const headers = new Headers();
-        addSecurityHeaders(headers, null, {});
-        return new Response('Authentication failed', { status: 403, headers });
-      }
-      
-      if (isExpired(userData.expiration_date, userData.expiration_time)) {
-        const headers = new Headers();
-        addSecurityHeaders(headers, null, {});
-        return new Response('Authentication failed', { status: 403, headers });
-      }
-      
-      if (userData.traffic_limit && userData.traffic_limit > 0 && 
-          (userData.traffic_used || 0) >= userData.traffic_limit) {
-        const headers = new Headers();
-        addSecurityHeaders(headers, null, {});
-        return new Response('Authentication failed', { status: 403, headers });
-      }
-      
-      return await handleIpSubscription(core, uuid, url.hostname);
-    };
-
-    if (url.pathname.startsWith('/xray/')) {
-      return await handleSubscription('xray');
-    }
-    
-    if (url.pathname.startsWith('/sb/')) {
-      return await handleSubscription('sb');
-    }
-
-    const path = url.pathname.slice(1);
-    if (isValidUUID(path)) {
-      const rateLimitKey = `user_path_rate:${clientIp}`;
-      if (await checkRateLimit(env.DB, rateLimitKey, CONST.USER_PATH_RATE_LIMIT, CONST.USER_PATH_RATE_TTL)) {
-        const headers = new Headers();
-        addSecurityHeaders(headers, null, {});
-        return new Response('Rate limit exceeded', { status: 429, headers });
+      if (url.pathname === '/favicon.ico') {
+        return new Response(null, {
+          status: 301,
+          headers: {
+            Location: 'https://www.google.com/favicon.ico'
+          }
+        });
       }
 
-      const userData = await getUserData(env, path, ctx);
-      if (!userData) {
-        const headers = new Headers();
-        addSecurityHeaders(headers, null, {});
-        return new Response('Authentication failed', { status: 403, headers });
-      }
-      
-      return await handleUserPanel(request, path, url.hostname, cfg.proxyAddress, userData, clientIp);
-    }
-
-    if (env.ROOT_PROXY_URL) {
-      try {
-        let proxyUrl;
-        try {
-          proxyUrl = new URL(env.ROOT_PROXY_URL);
-        } catch (urlError) {
-          console.error(`Invalid ROOT_PROXY_URL: ${env.ROOT_PROXY_URL}`, urlError);
+      const upgradeHeader = request.headers.get('Upgrade');
+      if (upgradeHeader?.toLowerCase() === 'websocket') {
+        if (!env.DB) {
           const headers = new Headers();
           addSecurityHeaders(headers, null, {});
-          return new Response('Proxy configuration error: Invalid URL format', { status: 500, headers });
-        }
-
-        const targetUrl = new URL(request.url);
-        targetUrl.hostname = proxyUrl.hostname;
-        targetUrl.protocol = proxyUrl.protocol;
-        if (proxyUrl.port) {
-          targetUrl.port = proxyUrl.port;
+          return new Response('Service not configured properly', { status: 503, headers });
         }
         
-        const newRequest = new Request(targetUrl.toString(), {
-          method: request.method,
-          headers: request.headers,
-          body: request.body,
-          redirect: 'manual'
-        });
+        // Domain Fronting: Set random Host header from HOST_HEADERS
+        const hostHeaders = env.HOST_HEADERS ? env.HOST_HEADERS.split(',').map(h => h.trim()) : ['speed.cloudflare.com'];
+        const evasionHost = pick(hostHeaders);
+        const newHeaders = new Headers(request.headers);
+        newHeaders.set('Host', evasionHost);
+        const newRequest = new Request(request, { headers: newHeaders });
         
-        newRequest.headers.set('Host', proxyUrl.hostname);
-        newRequest.headers.set('X-Forwarded-For', clientIp);
-        newRequest.headers.set('X-Forwarded-Proto', targetUrl.protocol.replace(':', ''));
-        newRequest.headers.set('X-Real-IP', clientIp);
+        const requestConfig = {
+          userID: cfg.userID,
+          proxyIP: cfg.proxyIP,
+          proxyPort: cfg.proxyPort,
+          socks5Address: cfg.socks5.address,
+          socks5Relay: cfg.socks5.relayMode,
+          enableSocks: cfg.socks5.enabled,
+          parsedSocks5Address: cfg.socks5.enabled ? socks5AddressParser(cfg.socks5.address) : {},
+          scamalytics: cfg.scamalytics,
+        };
         
-        const response = await fetch(newRequest);
-        const mutableHeaders = new Headers(response.headers);
+        const wsResponse = await ProtocolOverWSHandler(newRequest, requestConfig, env, ctx);
         
-        mutableHeaders.delete('content-security-policy-report-only');
-        mutableHeaders.delete('x-frame-options');
-        
-        if (!mutableHeaders.has('Content-Security-Policy')) {
-          mutableHeaders.set('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: *; frame-ancestors 'self';");
-        }
-        if (!mutableHeaders.has('X-Frame-Options')) {
-          mutableHeaders.set('X-Frame-Options', 'SAMEORIGIN');
-        }
-        if (!mutableHeaders.has('Strict-Transport-Security')) {
-          mutableHeaders.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-        }
-        if (!mutableHeaders.has('X-Content-Type-Options')) {
-          mutableHeaders.set('X-Content-Type-Options', 'nosniff');
-        }
-        if (!mutableHeaders.has('Referrer-Policy')) {
-          mutableHeaders.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        }
-        
-        mutableHeaders.set('alt-svc', 'h3=":443"; ma=0');
-        
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: mutableHeaders
-        });
-      } catch (e) {
-        console.error(`Reverse Proxy Error: ${e.message}`, e.stack);
-        const headers = new Headers();
+        const headers = new Headers(wsResponse.headers);
         addSecurityHeaders(headers, null, {});
-        return new Response(`Proxy error: ${e.message}`, { status: 502, headers });
+        
+        return new Response(wsResponse.body, { status: wsResponse.status, webSocket: wsResponse.webSocket, headers });
       }
-    }
 
-    // Masquerade: Show generic HTML if directly visited
-    const masqueradeHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Welcome to nginx!</title>
-        <style>
-          body { width: 35em; margin: 0 auto; font-family: Tahoma, Verdana, Arial, sans-serif; }
-        </style>
-      </head>
-      <body>
-        <h1>Welcome to nginx!</h1>
-        <p>If you see this page, the nginx web server is successfully installed and working. Further configuration is required.</p>
-        <p>For online documentation and support please refer to <a href="http://nginx.org/">nginx.org</a>.</p>
-        <p><em>Thank you for using nginx.</em></p>
-      </body>
-      </html>
-    `;
-    const headers = new Headers({ 'Content-Type': 'text/html' });
-    addSecurityHeaders(headers, null, {});
-    return new Response(masqueradeHtml, { headers });
+      const handleSubscription = async (core) => {
+        const rateLimitKey = `user_path_rate:${clientIp}`;
+        if (await checkRateLimit(env.DB, rateLimitKey, CONST.USER_PATH_RATE_LIMIT, CONST.USER_PATH_RATE_TTL)) {
+          const headers = new Headers();
+          addSecurityHeaders(headers, null, {});
+          return new Response('Rate limit exceeded', { status: 429, headers });
+        }
+
+        const uuid = url.pathname.substring(`/${core}/`.length);
+        if (!isValidUUID(uuid)) {
+          const headers = new Headers();
+          addSecurityHeaders(headers, null, {});
+          return new Response('Invalid UUID', { status: 400, headers });
+        }
+        
+        const userData = await getUserData(env, uuid, ctx);
+        if (!userData) {
+          const headers = new Headers();
+          addSecurityHeaders(headers, null, {});
+          return new Response('Authentication failed', { status: 403, headers });
+        }
+        
+        if (isExpired(userData.expiration_date, userData.expiration_time)) {
+          const headers = new Headers();
+          addSecurityHeaders(headers, null, {});
+          return new Response('Authentication failed', { status: 403, headers });
+        }
+        
+        if (userData.traffic_limit && userData.traffic_limit > 0 && 
+            (userData.traffic_used || 0) >= userData.traffic_limit) {
+          const headers = new Headers();
+          addSecurityHeaders(headers, null, {});
+          return new Response('Authentication failed', { status: 403, headers });
+        }
+        
+        return await handleIpSubscription(core, uuid, url.hostname);
+      };
+
+      if (url.pathname.startsWith('/xray/')) {
+        return await handleSubscription('xray');
+      }
+      
+      if (url.pathname.startsWith('/sb/')) {
+        return await handleSubscription('sb');
+      }
+
+      const path = url.pathname.slice(1);
+      if (isValidUUID(path)) {
+        const rateLimitKey = `user_path_rate:${clientIp}`;
+        if (await checkRateLimit(env.DB, rateLimitKey, CONST.USER_PATH_RATE_LIMIT, CONST.USER_PATH_RATE_TTL)) {
+          const headers = new Headers();
+          addSecurityHeaders(headers, null, {});
+          return new Response('Rate limit exceeded', { status: 429, headers });
+        }
+
+        const userData = await getUserData(env, path, ctx);
+        if (!userData) {
+          const headers = new Headers();
+          addSecurityHeaders(headers, null, {});
+          return new Response('Authentication failed', { status: 403, headers });
+        }
+        
+        return await handleUserPanel(request, path, url.hostname, cfg.proxyAddress, userData, clientIp);
+      }
+
+      if (env.ROOT_PROXY_URL) {
+        try {
+          let proxyUrl;
+          try {
+            proxyUrl = new URL(env.ROOT_PROXY_URL);
+          } catch (urlError) {
+            console.error(`Invalid ROOT_PROXY_URL: ${env.ROOT_PROXY_URL}`, urlError);
+            const headers = new Headers();
+            addSecurityHeaders(headers, null, {});
+            return new Response('Proxy configuration error: Invalid URL format', { status: 500, headers });
+          }
+
+          const targetUrl = new URL(request.url);
+          targetUrl.hostname = proxyUrl.hostname;
+          targetUrl.protocol = proxyUrl.protocol;
+          if (proxyUrl.port) {
+            targetUrl.port = proxyUrl.port;
+          }
+          
+          const newRequest = new Request(targetUrl.toString(), {
+            method: request.method,
+            headers: request.headers,
+            body: request.body,
+            redirect: 'manual'
+          });
+          
+          newRequest.headers.set('Host', proxyUrl.hostname);
+          newRequest.headers.set('X-Forwarded-For', clientIp);
+          newRequest.headers.set('X-Forwarded-Proto', targetUrl.protocol.replace(':', ''));
+          newRequest.headers.set('X-Real-IP', clientIp);
+          
+          const response = await fetch(newRequest);
+          const mutableHeaders = new Headers(response.headers);
+          
+          mutableHeaders.delete('content-security-policy-report-only');
+          mutableHeaders.delete('x-frame-options');
+          
+          if (!mutableHeaders.has('Content-Security-Policy')) {
+            mutableHeaders.set('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: *; frame-ancestors 'self';");
+          }
+          if (!mutableHeaders.has('X-Frame-Options')) {
+            mutableHeaders.set('X-Frame-Options', 'SAMEORIGIN');
+          }
+          if (!mutableHeaders.has('Strict-Transport-Security')) {
+            mutableHeaders.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+          }
+          if (!mutableHeaders.has('X-Content-Type-Options')) {
+            mutableHeaders.set('X-Content-Type-Options', 'nosniff');
+          }
+          if (!mutableHeaders.has('Referrer-Policy')) {
+            mutableHeaders.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+          }
+          
+          mutableHeaders.set('alt-svc', 'h3=":443"; ma=0');
+          
+          return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: mutableHeaders
+          });
+        } catch (e) {
+          console.error(`Reverse Proxy Error: ${e.message}`, e.stack);
+          const headers = new Headers();
+          addSecurityHeaders(headers, null, {});
+          return new Response(`Proxy error: ${e.message}`, { status: 502, headers });
+        }
+      }
+
+      // Masquerade: Show generic HTML if directly visited
+      const masqueradeHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Welcome to nginx!</title>
+          <style>
+            body { width: 35em; margin: 0 auto; font-family: Tahoma, Verdana, Arial, sans-serif; }
+          </style>
+        </head>
+        <body>
+          <h1>Welcome to nginx!</h1>
+          <p>If you see this page, the nginx web server is successfully installed and working. Further configuration is required.</p>
+          <p>For online documentation and support please refer to <a href="http://nginx.org/">nginx.org</a>.</p>
+          <p><em>Thank you for using nginx.</em></p>
+        </body>
+        </html>
+      `;
+      const headers = new Headers({ 'Content-Type': 'text/html' });
+      addSecurityHeaders(headers, null, {});
+      return new Response(masqueradeHtml, { headers });
+    } catch (error) {
+      console.error('Unexpected error in fetch handler:', error.stack || error);
+      const headers = new Headers();
+      addSecurityHeaders(headers, null, {});
+      return new Response('An unexpected error occurred. Please try again later.', { status: 500, headers });
+    }
   },
 }
