@@ -31,15 +31,16 @@ const Config = {
   async fromEnv(env) {
     let selectedProxyIP = null;
 
+    // Health Check & Auto-Switching from D1
     if (env.D1) {
       try {
-        const { results } = await env.D1.prepare("SELECT ip FROM proxy_scans WHERE is_current_best = 1 LIMIT 1").all();
-        selectedProxyIP = results[0]?.ip || null;
+        const { results } = await env.D1.prepare("SELECT ip_port FROM proxy_health WHERE is_healthy = 1 ORDER BY latency_ms ASC LIMIT 1").all();
+        selectedProxyIP = results[0]?.ip_port || null;
         if (selectedProxyIP) {
-          console.log(`Using proxy IP from D1: ${selectedProxyIP}`);
+          console.log(`Using best healthy proxy IP from D1: ${selectedProxyIP}`);
         }
       } catch (e) {
-        console.error(`Failed to read from D1: ${e.message}`);
+        console.error(`Failed to read proxy health from D1: ${e.message}`);
       }
     }
 
@@ -95,6 +96,8 @@ const CONST = {
   USER_PATH_RATE_TTL: 60,
   AUTO_REFRESH_INTERVAL: 60000, // 1 minute auto-refresh
   IP_CLEANUP_AGE_DAYS: 30, // Cleanup old user_ips
+  HEALTH_CHECK_INTERVAL: 300000, // 5 minutes for health check
+  HEALTH_CHECK_TIMEOUT: 5000, // Timeout for health checks
 };
 
 // ============================================================================
@@ -114,8 +117,8 @@ function addSecurityHeaders(headers, nonce, cspDomains = {}) {
     "object-src 'none'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
-    nonce ? `script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com https://unpkg.com` : "script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com 'unsafe-inline'",
-    nonce ? `style-src 'nonce-${nonce}' 'unsafe-hashes'` : "style-src 'self' 'unsafe-inline' 'unsafe-hashes'",
+    nonce ? `script-src 'nonce-${nonce}' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com` : "script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com 'unsafe-inline'",
+    nonce ? `style-src 'nonce-${nonce}' 'unsafe-inline' 'unsafe-hashes'` : "style-src 'self' 'unsafe-inline' 'unsafe-hashes'",
     `img-src 'self' data: https: blob: ${cspDomains.img || ''}`.trim(),
     `connect-src 'self' https: ${cspDomains.connect || ''}`.trim(),
   ];
@@ -184,7 +187,7 @@ function isExpired(expDate, expTime) {
   return expDatetimeUTC <= new Date() || isNaN(expDatetimeUTC.getTime());
 }
 
-function formatBytes(bytes) {
+async function formatBytes(bytes) {
   if (bytes === 0) return '0 Bytes';
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
@@ -734,6 +737,7 @@ const adminPanelHTML = [
   '    <div class="container">',
   '        <h1>Admin Dashboard</h1>',
   '        <button id="logoutBtn" class="btn btn-danger" style="position: absolute; top: 20px; right: 20px;">Logout</button>',
+  '        <button id="healthCheckBtn" class="btn btn-secondary" style="position: absolute; top: 20px; right: 120px;">Run Health Check</button>',
   '        <div class="dashboard-stats">',
   '            <div class="stat-card"><div class="stat-value" id="total-users">0</div><div class="stat-label">Total Users</div></div>',
   '            <div class="stat-card"><div class="stat-value" id="active-users">0</div><div class="stat-label">Active Users</div></div>',
@@ -822,6 +826,7 @@ const adminPanelHTML = [
   '            const selectAll = document.getElementById(\'selectAll\');',
   '            const deleteSelected = document.getElementById(\'deleteSelected\');',
   '            const logoutBtn = document.getElementById(\'logoutBtn\');',
+  '            const healthCheckBtn = document.getElementById(\'healthCheckBtn\');',
   '            let autoRefreshInterval;',
   '',
   '            function escapeHTML(str) {',
@@ -835,7 +840,7 @@ const adminPanelHTML = [
   '              })[m]);',
   '            }',
   '',
-  '            function formatBytes(bytes) {',
+  '            async function formatBytes(bytes) {',
   '              if (bytes === 0) return \'0 Bytes\';',
   '              const k = 1024;',
   '              const sizes = [\'Bytes\', \'KB\', \'MB\', \'GB\', \'TB\', \'PB\', \'EB\', \'ZB\', \'YB\'];',
@@ -1025,7 +1030,7 @@ const adminPanelHTML = [
   '                document.getElementById(\'total-users\').textContent = stats.total_users;',
   '                document.getElementById(\'active-users\').textContent = stats.active_users;',
   '                document.getElementById(\'expired-users\').textContent = stats.expired_users;',
-  '                document.getElementById(\'total-traffic\').textContent = formatBytes(stats.total_traffic);',
+  '                document.getElementById(\'total-traffic\').textContent = await formatBytes(stats.total_traffic);',
   '              } catch (error) { showToast(error.message, true); }',
   '            }',
   '',
@@ -1262,6 +1267,14 @@ const adminPanelHTML = [
   '              renderUsers(filtered);',
   '            }',
   '',
+  '            async function handleHealthCheck() {',
+  '                try {',
+  '                    const result = await api.post(\'/health-check\', {});',
+  '                    showToast(\'Health check completed successfully!\', false);',
+  '                    await fetchAndRenderUsers(); // Refresh after check',
+  '                } catch (error) { showToast(error.message, true); }',
+  '            }',
+  '',
   '            generateUUIDBtn.addEventListener(\'click\', () => uuidInput.value = crypto.randomUUID());',
   '            createUserForm.addEventListener(\'submit\', handleCreateUser);',
   '            editUserForm.addEventListener(\'submit\', handleEditUser);',
@@ -1290,6 +1303,7 @@ const adminPanelHTML = [
   '            });',
   '            deleteSelected.addEventListener(\'click\', handleBulkDelete);',
   '            logoutBtn.addEventListener(\'click\', handleLogout);',
+  '            healthCheckBtn.addEventListener(\'click\', handleHealthCheck);',
   '',
   '            setDefaultExpiry();',
   '            uuidInput.value = crypto.randomUUID();',
@@ -1547,6 +1561,17 @@ async function handleAdminRequest(request, env, ctx, adminPrefix) {
       }
     }
 
+    if (adminSubPath === '/api/health-check' && request.method === 'POST') {
+      const headers = new Headers(jsonHeader);
+      addSecurityHeaders(headers, null, {});
+      try {
+        await performHealthCheck(env, ctx);
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers });
+      } catch (error) {
+        return new Response(JSON.stringify({ error: error.message }), { status: 500, headers });
+      }
+    }
+
     const headers = new Headers(jsonHeader);
     addSecurityHeaders(headers, null, {});
     return new Response(JSON.stringify({ error: 'API route not found' }), { status: 404, headers });
@@ -1738,16 +1763,20 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
     usagePercentageDisplay = `${usagePercentage.toFixed(2)}%`;
   }
 
-  // Server-side geo detection
+  // Server-side geo detection with Cloudflare CF
+  const requestCf = request.cf || {};
+  const clientGeo = {
+    city: requestCf.city || '',
+    country: requestCf.country || '',
+    isp: requestCf.asOrganization || ''
+  };
+  const clientLocation = [clientGeo.city, clientGeo.country].filter(Boolean).join(', ') || 'Detection failed';
+  const clientIsp = clientGeo.isp || 'Detection failed';
+
   const proxyHost = proxyAddress.split(':')[0];
   const proxyIP = await resolveProxyIP(proxyHost);
-  const clientIp = request.headers.get('CF-Connecting-IP');
-  const clientGeo = await getGeo(clientIp);
   const proxyGeo = await getGeo(proxyIP);
-
-  const clientLocation = clientGeo ? [clientGeo.city, clientGeo.country].filter(Boolean).join(', ') : 'Detection failed';
-  const clientIsp = clientGeo ? clientGeo.isp : 'Detection failed';
-  const proxyLocation = proxyGeo ? [proxyGeo.city, proxyGeo.country].filter(Boolean).join(', ') : 'Detection failed';
+  const proxyLocation = [proxyGeo.city, proxyGeo.country].filter(Boolean).join(', ') || 'Detection failed';
 
   const userPanelHTML = [
   '<!doctype html>',
@@ -1868,11 +1897,11 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '        <div class="lbl">Account Status</div>',
   '      </div>',
   '      <div class="stat">',
-  '        <div class="val" id="usage-display">' + formatBytes(userData.traffic_used || 0) + '</div>',
+  '        <div class="val" id="usage-display">' + await formatBytes(userData.traffic_used || 0) + '</div>',
   '        <div class="lbl">Data Used</div>',
   '      </div>',
   '      <div class="stat ' + (usagePercentage > 80 ? 'status-warning' : '') + '">',
-  '        <div class="val">' + (userData.traffic_limit && userData.traffic_limit > 0 ? formatBytes(userData.traffic_limit) : 'Unlimited') + '</div>',
+  '        <div class="val">' + (userData.traffic_limit && userData.traffic_limit > 0 ? await formatBytes(userData.traffic_limit) : 'Unlimited') + '</div>',
   '        <div class="lbl">Data Limit</div>',
   '      </div>',
   '      <div class="stat">',
@@ -1893,7 +1922,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '             style="width: 0%"' +
   '             data-target-width="' + usagePercentage.toFixed(2) + '"></div>' +
   '      </div>' +
-  '      <p class="muted text-center mb-2">' + formatBytes(userData.traffic_used || 0) + ' of ' + formatBytes(userData.traffic_limit) + ' used</p>' +
+  '      <p class="muted text-center mb-2">' + await formatBytes(userData.traffic_used || 0) + ' of ' + await formatBytes(userData.traffic_limit) + ' used</p>' +
   '    </div>'
   : '') ,
 
@@ -2066,15 +2095,15 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '      initialTrafficUsed: ' + (userData.traffic_used || 0) + '',
   '    };',
   '    ',
-  '    window.CLIENT_GEO = null;',
-  '    window.PROXY_GEO = null;',
-  '    window.PROXY_IP = null;',
-  '    window.CLIENT_IP = null;',
+  '    window.CLIENT_GEO = ' + JSON.stringify(clientGeo) + ';',
+  '    window.PROXY_GEO = ' + JSON.stringify(proxyGeo) + ';',
+  '    window.PROXY_IP = "' + proxyIP + '";',
+  '    window.CLIENT_IP = "' + clientIp + '";',
   '    ',
-  '    function formatBytes(bytes) {',
+  '    async function formatBytes(bytes) {',
   '      if (bytes === 0) return \'0 Bytes\';',
   '      const k = 1024;',
-  '      const sizes = [\'Bytes\', \'KB\', \'MB\', \'GB\', \'TB\'];',
+  '      const sizes = [\'Bytes\', \'KB\', \'MB\', \'GB\', \'TB\', \'PB\', \'EB\', \'ZB\', \'YB\'];',
   '      const i = Math.floor(Math.log(bytes) / Math.log(k));',
   '      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + \' \' + sizes[i];',
   '    }',
@@ -2579,7 +2608,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '            if (data.status === \'fail\') throw new Error(data.message || \'API Error\');',
   '            return {',
   '              city: data.city || \'\',',
-  '              country: data.country || \'\',',
+  '              country: data.country || \'\' ,',
   '              isp: data.isp || \'\'',
   '            };',
   '          }',
@@ -2591,19 +2620,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '            if (!data.success) throw new Error(\'API Error\');',
   '            return {',
   '              city: data.city || \'\',',
-  '              country: data.country || \'\',',
-  '              isp: data.connection?.isp || \'\'',
-  '            };',
-  '          }',
-  '        },',
-  '        {',
-  '          url: clientIP ? \`https://freegeoip.app/json/\${clientIP}\` : \'https://freegeoip.app/json/\',',
-  '          parse: async (r) => {',
-  '            const data = await r.json();',
-  '            return {',
-  '              city: data.city || \'\',',
-  '              country: data.country_name || \'\',',
-  '              isp: \'\' // No ISP in this API',
+  '              country: data.country || \'\'',
   '            };',
   '          }',
   '        }',
@@ -2814,7 +2831,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '          const data = await response.json();',
   '',
   '          const usageDisplay = document.getElementById(\'usage-display\');',
-  '          usageDisplay.textContent = formatBytes(data.traffic_used || 0);',
+  '          usageDisplay.textContent = await formatBytes(data.traffic_used || 0);',
   '',
   '          let usagePercentage = 0;',
   '          if (data.traffic_limit && data.traffic_limit > 0) {',
@@ -2846,7 +2863,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '',
   '          const usageText = document.querySelector(\'.progress-bar + p\');',
   '          if (usageText) {',
-  '            usageText.textContent = formatBytes(data.traffic_used || 0) + \' of \' + (data.traffic_limit ? formatBytes(data.traffic_limit) : \'Unlimited\') + \' used\';',
+  '            usageText.textContent = await formatBytes(data.traffic_used || 0) + \' of \' + (data.traffic_limit ? await formatBytes(data.traffic_limit) : \'Unlimited\') + \' used\';',
   '          }',
   '        }',
   '',
@@ -3856,6 +3873,48 @@ function socks5AddressParser(address) {
 }
 
 // ============================================================================
+// HEALTH CHECK & AUTO-SWITCHING (D1-based)
+// ============================================================================
+
+async function performHealthCheck(env, ctx) {
+  const proxyIps = env.PROXYIPS ? env.PROXYIPS.split(',').map(ip => ip.trim()) : Config.proxyIPs;
+  
+  const healthStmts = [];
+  
+  for (const ipPort of proxyIps) {
+    const [host, port = '443'] = ipPort.split(':');
+    let latency = null;
+    let isHealthy = 0;
+    
+    const start = Date.now();
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), CONST.HEALTH_CHECK_TIMEOUT);
+      
+      const response = await fetch(`https://${host}:${port}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        latency = Date.now() - start;
+        isHealthy = 1;
+      }
+    } catch (e) {
+      console.error(`Health check failed for ${ipPort}: ${e.message}`);
+    }
+    
+    healthStmts.push(
+      env.DB.prepare(
+        "INSERT OR REPLACE INTO proxy_health (ip_port, is_healthy, latency_ms, last_check) VALUES (?, ?, ?, ?)"
+      ).bind(ipPort, isHealthy, latency, Date.now())
+    );
+  }
+  
+  await env.DB.batch(healthStmts);
+  
+  console.log('Proxy health check completed.');
+}
+
+// ============================================================================
 // MAIN FETCH HANDLER
 // ============================================================================
 
@@ -3887,6 +3946,14 @@ export default {
       return new Response('OK', { status: 200, headers });
     }
 
+    // Health Check Endpoint for Cron
+    if (url.pathname === '/health-check' && request.method === 'GET') {
+      await performHealthCheck(env, ctx);
+      const headers = new Headers();
+      addSecurityHeaders(headers, null, {});
+      return new Response('Health check performed', { status: 200, headers });
+    }
+
     if (url.pathname.startsWith('/api/user/')) {
       const uuid = url.pathname.substring('/api/user/'.length);
       const headers = new Headers({ 'Content-Type': 'application/json' });
@@ -3916,6 +3983,11 @@ export default {
         addSecurityHeaders(headers, null, {});
         return new Response('Service not configured properly', { status: 503, headers });
       }
+      
+      // Domain Fronting: Set random Host header from HOST_HEADERS
+      const hostHeaders = env.HOST_HEADERS ? env.HOST_HEADERS.split(',').map(h => h.trim()) : ['speed.cloudflare.com'];
+      const evasionHost = pick(hostHeaders);
+      request.headers.set('Host', evasionHost);
       
       const requestConfig = {
         userID: cfg.userID,
@@ -4069,8 +4141,26 @@ export default {
       }
     }
 
-    const headers = new Headers();
+    // Masquerade: Show generic HTML if directly visited
+    const masqueradeHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Welcome to nginx!</title>
+        <style>
+          body { width: 35em; margin: 0 auto; font-family: Tahoma, Verdana, Arial, sans-serif; }
+        </style>
+      </head>
+      <body>
+        <h1>Welcome to nginx!</h1>
+        <p>If you see this page, the nginx web server is successfully installed and working. Further configuration is required.</p>
+        <p>For online documentation and support please refer to <a href="http://nginx.org/">nginx.org</a>.</p>
+        <p><em>Thank you for using nginx.</em></p>
+      </body>
+      </html>
+    `;
+    const headers = new Headers({ 'Content-Type': 'text/html' });
     addSecurityHeaders(headers, null, {});
-    return new Response('Not found', { status: 404, headers });
+    return new Response(masqueradeHtml, { headers });
   },
 }
