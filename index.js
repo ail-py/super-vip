@@ -587,7 +587,7 @@ async function handleIpSubscription(core, userID, hostName) {
 }
 
 // ============================================================================
-// ADMIN PANEL HTML (preserved from original, with auto-refresh enhancements)
+// ADMIN LOGIN HTML (preserved from original, with auto-refresh enhancements)
 // ============================================================================
 
 const adminLoginHTML = [
@@ -713,7 +713,7 @@ const adminPanelHTML = [
   '            padding: 6px 10px; font-size: 12px; font-weight: 500;',
   '        }',
   '        .btn-outline-secondary:hover { background-color: var(--btn-secondary-bg); color: white; border-color: var(--btn-secondary-bg); }',
-  '        .checkbox { width: 16px; height: 16px; margin-right: 10px; cursor: pointer; }',
+  '        .checkbox { padding: 0; width: 16px; height: 16px; margin-right: 10px; cursor: pointer; }',
   '        .select-all { cursor: pointer; }',
   '        ',
   '        @media (max-width: 768px) {',
@@ -787,7 +787,7 @@ const adminPanelHTML = [
   '                <div class="form-group" style="margin-top: 16px;">',
   '                    <label for="editExpiryTime">Expiry Time (Your Local Time)</label>',
   '                    <input type="time" id="editExpiryTime" name="exp_time" step="1" required>',
-  '                     <div class="label-note">Your current timezone is used for conversion.</div>',
+  '                    <div class="label-note">Your current timezone is used for conversion.</div>',
   '                    <div class="time-quick-set-group" data-target-date="editExpiryDate" data-target-time="editExpiryTime">',
   '                        <button type="button" class="btn btn-outline-secondary" data-amount="1" data-unit="hour">+1 Hour</button>',
   '                        <button type="button" class="btn btn-outline-secondary" data-amount="1" data-unit="day">+1 Day</button>',
@@ -1254,12 +1254,12 @@ const adminPanelHTML = [
   '            }',
   '',
   '            function filterUsers() {',
-  '              const searchTerm = searchInput.value.toLowerCase();',
-  '              const filtered = allUsers.filter(user => ',
-  '                user.uuid.toLowerCase().includes(searchTerm) || ',
-  '                (user.notes && user.notes.toLowerCase().includes(searchTerm))',
-  '              );',
-  '              renderUsers(filtered);',
+  '                const searchTerm = searchInput.value.toLowerCase();',
+  '                const filtered = allUsers.filter(user => ',
+  '                  user.uuid.toLowerCase().includes(searchTerm) || ',
+  '                  (user.notes && user.notes.toLowerCase().includes(searchTerm))',
+  '                );',
+  '                renderUsers(filtered);',
   '            }',
   '',
   '            generateUUIDBtn.addEventListener(\'click\', () => uuidInput.value = crypto.randomUUID());',
@@ -1367,7 +1367,7 @@ async function handleAdminRequest(request, env, ctx, adminPrefix) {
   const adminSubPath = url.pathname.substring(adminBasePath.length) || '/';
 
   if (adminSubPath.startsWith('/api/')) {
-    if (!(await isAdmin(request, env))) {
+    if (!(await isAdmin(request, env)) {
       const headers = new Headers(jsonHeader);
       addSecurityHeaders(headers, null, {});
       return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers });
@@ -1646,113 +1646,7 @@ async function handleAdminRequest(request, env, ctx, adminPrefix) {
 // USER PANEL - UNIVERSAL QR CODE WITH MULTIPLE FALLBACK METHODS (with auto-refresh enhancements)
 // ============================================================================
 
-async function resolveProxyIP(proxyHost) {
-  const ipv4Regex = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-  const ipv6Regex = /^\[?[0-9a-fA-F:]+\]?$/;
-
-  if (ipv4Regex.test(proxyHost) || ipv6Regex.test(proxyHost)) {
-    return proxyHost;
-  }
-
-  const dnsAPIs = [
-    { url: `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(proxyHost)}&type=A`, parse: data => data.Answer?.find(a => a.type === 1)?.data },
-    { url: `https://dns.google/resolve?name=${encodeURIComponent(proxyHost)}&type=A`, parse: data => data.Answer?.find(a => a.type === 1)?.data },
-    { url: `https://1.1.1.1/dns-query?name=${encodeURIComponent(proxyHost)}&type=A`, parse: data => data.Answer?.find(a => a.type === 1)?.data }
-  ];
-
-  for (const api of dnsAPIs) {
-    try {
-      const response = await fetch(api.url, { headers: { 'accept': 'application/dns-json' } });
-      if (response.ok) {
-        const data = await response.json();
-        const ip = api.parse(data);
-        if (ip && ipv4Regex.test(ip)) return ip;
-      }
-    } catch (e) {
-      // Silent fail
-    }
-  }
-  return proxyHost; // Fallback to host if resolution fails
-}
-
-async function getGeo(ip) {
-  const geoAPIs = [
-    { url: `https://ipapi.co/${ip}/json/`, parse: data => ({ city: data.city || '', country: data.country_name || '', isp: data.org || '' }) },
-    { url: `https://ip-api.com/json/${ip}?fields=status,message,city,country,isp`, parse: data => data.status !== 'fail' ? ({ city: data.city || '', country: data.country || '', isp: data.isp || '' }) : null },
-    { url: `https://ipwho.is/${ip}`, parse: data => data.success ? ({ city: data.city || '', country: data.country || '', isp: data.connection?.isp || '' }) : null },
-    { url: `https://freegeoip.app/json/${ip}`, parse: data => ({ city: data.city || '', country: data.country_name || '', isp: '' }) },
-    { url: `https://ipapi.is/${ip}.json`, parse: data => ({ city: data.location?.city || '', country: data.location?.country || '', isp: data.asn?.org || '' }) },
-    { url: `https://freeipapi.com/api/json/${ip}`, parse: data => ({ city: data.cityName || '', country: data.countryName || '', isp: '' }) }
-  ];
-
-  for (const api of geoAPIs) {
-    try {
-      const response = await fetch(api.url);
-      if (response.ok) {
-        const data = await response.json();
-        const geo = api.parse(data);
-        if (geo && (geo.city || geo.country)) return geo;
-      }
-    } catch (e) {
-      // Silent fail
-    }
-  }
-  return null;
-}
-
-function handleUserPanel(userID, hostName, proxyAddress, userData) {
-  const subXrayUrl = `https://${hostName}/xray/${userID}`;
-  const subSbUrl = `https://${hostName}/sb/${userID}`;
-  
-  const singleXrayConfig = buildLink({ 
-    core:'xray', proto: 'tls', userID, hostName, address: hostName, port: 443, tag: 'Main'  });
-  
-  const singleSingboxConfig = buildLink({ 
-    core: 'sb', proto: 'tls', userID, hostName, address: hostName, port: 443, tag: 'Main'
-  });
-
-  const clientUrls = {
-    universalAndroid: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    windows: `clash://install-config?url=${encodeURIComponent(subSbUrl)}`,
-    macos: `clash://install-config?url=${encodeURIComponent(subSbUrl)}`,
-    karing: `karing://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    shadowrocket: `shadowrocket://add/sub?url=${encodeURIComponent(subXrayUrl)}&name=${encodeURIComponent(hostName)}`,
-    streisand: `streisand://install-config?url=${encodeURIComponent(subXrayUrl)}`
-  };
-
-  const isUserExpired = isExpired(userData.expiration_date, userData.expiration_time);
-  const expirationDateTime = userData.expiration_date && userData.expiration_time 
-    ? `${userData.expiration_date}T${userData.expiration_time}Z` 
-    : null;
-
-  let usagePercentage = 0;
-  if (userData.traffic_limit && userData.traffic_limit > 0) {
-    usagePercentage = Math.min(((userData.traffic_used || 0) / userData.traffic_limit) * 100, 100);
-  }
-
-  let usagePercentageDisplay;
-  if (usagePercentage > 0 && usagePercentage < 0.01) {
-    usagePercentageDisplay = '< 0.01%';
-  } else if (usagePercentage === 0) {
-    usagePercentageDisplay = '0%';
-  } else if (usagePercentage === 100) {
-    usagePercentageDisplay = '100%';
-  } else {
-    usagePercentageDisplay = `${usagePercentage.toFixed(2)}%`;
-  }
-
-  // Server-side geo detection
-  const proxyHost = proxyAddress.split(':')[0];
-  const proxyIP = await resolveProxyIP(proxyHost);
-  const clientIp = request.headers.get('CF-Connecting-IP');
-  const clientGeo = await getGeo(clientIp);
-  const proxyGeo = await getGeo(proxyIP);
-
-  const clientLocation = clientGeo ? [clientGeo.city, clientGeo.country].filter(Boolean).join(', ') : 'Detection failed';
-  const clientIsp = clientGeo ? clientGeo.isp : 'Detection failed';
-  const proxyLocation = proxyGeo ? [proxyGeo.city, proxyGeo.country].filter(Boolean).join(', ') : 'Detection failed';
-
-  const userPanelHTML = [
+const userPanelHTML = [
   '<!doctype html>',
   '<html lang="en">',
   '<head>',
@@ -1866,16 +1760,16 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '    <p class="lead">Manage your proxy configuration, view subscription links, and monitor usage statistics.</p>',
   '',
   '    <div class="stats">',
-  '      <div class="stat ' + (isUserExpired ? 'status-expired' : 'status-active') + '">',
-  '        <div class="val" id="status-badge">' + (isUserExpired ? 'Expired' : 'Active') + '</div>',
+  '      <div class="stat status-badge">',
+  '        <div class="val" id="status-badge">Loading...</div>',
   '        <div class="lbl">Account Status</div>',
   '      </div>',
   '      <div class="stat">',
-  '        <div class="val" id="usage-display">' + formatBytes(userData.traffic_used || 0) + '</div>',
+  '        <div class="val" id="usage-display">0 Bytes</div>',
   '        <div class="lbl">Data Used</div>',
   '      </div>',
-  '      <div class="stat ' + (usagePercentage > 80 ? 'status-warning' : '') + '">',
-  '        <div class="val">' + (userData.traffic_limit && userData.traffic_limit > 0 ? formatBytes(userData.traffic_limit) : 'Unlimited') + '</div>',
+  '      <div class="stat">',
+  '        <div class="val" id="data-limit-display">Unlimited</div>',
   '        <div class="lbl">Data Limit</div>',
   '      </div>',
   '      <div class="stat">',
@@ -1884,43 +1778,30 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '      </div>',
   '    </div>',
   '',
- (userData.traffic_limit && userData.traffic_limit > 0 ? 
-  '    <div class="card">' +
-  '      <div class="section-title">' +
-  '        <h2>📊 Usage Statistics</h2>' +
-  '        <span class="muted">' + usagePercentageDisplay + ' Used</span>' +
-  '      </div>' +
-  '      <div class="progress-bar">' +
-  '        <div class="progress-fill ' + (usagePercentage > 80 ? 'high' : usagePercentage > 50 ? 'medium' : 'low') + '" ' +
-  '             id="progress-bar-fill"' +
-  '             style="width: 0%"' +
-  '             data-target-width="' + usagePercentage.toFixed(2) + '"></div>' +
-  '      </div>' +
-  '      <p class="muted text-center mb-2">' + formatBytes(userData.traffic_used || 0) + ' of ' + formatBytes(userData.traffic_limit) + ' used</p>' +
-  '    </div>'
-  : '') ,
-
- (expirationDateTime ? 
-  '    <div class="card">' +
-  '      <div class="section-title">' +
-  '        <h2>⏰ Expiration Information</h2>' +
-  '      </div>' +
-  '      <div id="expiration-display" data-expiry="' + expirationDateTime + '">' +
-  '        <p class="muted" id="expiry-local">Loading expiration time...</p>' +
-  '        <p class="muted" id="expiry-utc" style="font-size:13px;margin-top:4px"></p>' +
-  '      </div>' +
- (isUserExpired ? 
-  '      <div class="expiry-warning">' +
-  '        ⚠️ Your account has expired. Please contact your administrator to renew access.' +
-  '      </div>'
-  : 
-  '      <div class="expiry-info">' +
-  '        ✓ Your account is currently active and working normally.' +
-  '      </div>'
-  ) +
-  '    </div>'
-  : '') ,
-
+  '    <div class="card">',
+  '      <div class="section-title">',
+  '        <h2>📊 Usage Statistics</h2>',
+  '        <span class="muted" id="usage-percentage">0% Used</span>',
+  '      </div>',
+  '      <div class="progress-bar">',
+  '        <div class="progress-fill" id="progress-bar-fill" style="width: 0%"></div>',
+  '      </div>',
+  '      <p class="muted text-center mb-2" id="usage-text">0 Bytes of Unlimited used</p>',
+  '    </div>',
+  '',
+  '    <div class="card">',
+  '      <div class="section-title">',
+  '        <h2>⏰ Expiration Information</h2>',
+  '      </div>',
+  '      <div id="expiration-display">',
+  '        <p class="muted" id="expiry-local">Loading expiration time...</p>',
+  '        <p class="muted" id="expiry-utc" style="font-size:13px;margin-top:4px"></p>',
+  '      </div>',
+  '      <div id="expiry-status" class="expiry-info">',
+  '        ✓ Your account is currently active and working normally.',
+  '      </div>',
+  '    </div>',
+  '',
   '    <div class="grid">',
   '      <div>',
   '        <div class="card">',
@@ -1932,27 +1813,27 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '          <div class="info-grid">',
   '            <div class="info-item">',
   '              <span class="label">Proxy Host</span>',
-  '              <span class="value" id="proxy-host">' + (proxyAddress || hostName) + '</span>',
+  '              <span class="value" id="proxy-host">Loading...</span>',
   '            </div>',
   '            <div class="info-item">',
   '              <span class="label">Proxy IP</span>',
-  '              <span class="value" id="proxy-ip">' + (proxyIP || 'Detection failed') + '</span>',
+  '              <span class="value" id="proxy-ip">Detecting...</span>',
   '            </div>',
   '            <div class="info-item">',
   '              <span class="label">Proxy Location</span>',
-  '              <span class="value" id="proxy-location">' + (proxyLocation || 'Detection failed') + '</span>',
+  '              <span class="value" id="proxy-location">Detecting...</span>',
   '            </div>',
   '            <div class="info-item">',
   '              <span class="label">Your IP</span>',
-  '              <span class="value" id="client-ip">' + (clientIp || 'Detection failed') + '</span>',
+  '              <span class="value" id="client-ip">Detecting...</span>',
   '            </div>',
   '            <div class="info-item">',
   '              <span class="label">Your Location</span>',
-  '              <span class="value" id="client-location">' + (clientLocation || 'Detection failed') + '</span>',
+  '              <span class="value" id="client-location">Detecting...</span>',
   '            </div>',
   '            <div class="info-item">',
   '              <span class="label">Your ISP</span>',
-  '              <span class="value" id="client-isp">' + (clientIsp || 'Detection failed') + '</span>',
+  '              <span class="value" id="client-isp">Detecting...</span>',
   '            </div>',
   '          </div>',
   '        </div>',
@@ -1971,7 +1852,7 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '                <button class="btn ghost" id="show-xray-config">View Config</button>',
   '                <button class="btn ghost" id="qr-xray-sub-btn">QR Code</button>',
   '              </div>',
-  '              <pre class="config hidden" id="xray-config">' + escapeHTML(singleXrayConfig) + '</pre>',
+  '              <pre class="config hidden" id="xray-config"></pre>',
   '            </div>',
   '',
   '            <div>',
@@ -1981,16 +1862,16 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '                <button class="btn ghost" id="show-sb-config">View Config</button>',
   '                <button class="btn ghost" id="qr-sb-sub-btn">QR Code</button>',
   '              </div>',
-  '              <pre class="config hidden" id="sb-config">' + escapeHTML(singleSingboxConfig) + '</pre>',
+  '              <pre class="config hidden" id="sb-config"></pre>',
   '            </div>',
   '',
   '            <div>',
   '              <h3 style="font-size:16px;margin:12px 0 8px;color:var(--accent-2)">Quick Import</h3>',
   '              <div class="buttons">',
-  '                <a href="' + clientUrls.universalAndroid + '" rel="noopener noreferrer" class="btn ghost">📱 Android (V2rayNG)</a>',
-  '                <a href="' + clientUrls.shadowrocket + '" rel="noopener noreferrer" class="btn ghost">🍎 iOS (Shadowrocket)</a>',
-  '                <a href="' + clientUrls.streisand + '" rel="noopener noreferrer" class="btn ghost">🍎 iOS Streisand</a>',
-  '                <a href="' + clientUrls.karing + '" rel="noopener noreferrer" class="btn ghost">🔧 Android/iOS Karing</a>',
+  '                <a href="#" id="import-android" class="btn ghost">📱 Android (V2rayNG)</a>',
+  '                <a href="#" id="import-ios-shadowrocket" class="btn ghost">🍎 iOS (Shadowrocket)</a>',
+  '                <a href="#" id="import-ios-streisand" class="btn ghost">🍎 iOS Streisand</a>',
+  '                <a href="#" id="import-karing" class="btn ghost">🔧 Android/iOS Karing</a>',
   '              </div>',
   '            </div>',
   '          </div>',
@@ -2014,21 +1895,19 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '          <h2>👤 Account Details</h2>',
   '          <div class="info-item" style="margin-top:12px">',
   '            <span class="label">User UUID</span>',
-  '            <span class="value" style="font-family:var(--mono);font-size:12px;word-break:break-all">' + userID + '</span>',
+  '            <span class="value" style="font-family:var(--mono);font-size:12px;word-break:break-all">Loading...</span>',
   '          </div>',
   '          <div class="info-item" style="margin-top:12px">',
   '            <span class="label">Created Date</span>',
-  '            <span class="value">' + new Date(userData.created_at).toLocaleDateString() + '</span>',
+  '            <span class="value">Loading...</span>',
   '          </div>',
- (userData.notes ? 
-  '          <div class="info-item" style="margin-top:12px">' +
-  '            <span class="label">Notes</span>' +
-  '            <span class="value">' + escapeHTML(userData.notes) + '</span>' +
-  '          </div>'
-  : '') ,
+  '          <div class="info-item" style="margin-top:12px">',
+  '            <span class="label">Notes</span>',
+  '            <span class="value">Loading...</span>',
+  '          </div>',
   '          <div class="info-item" style="margin-top:12px">',
   '            <span class="label">IP Limit</span>',
-  '            <span class="value">' + (userData.ip_limit === -1 ? 'Unlimited' : userData.ip_limit) + '</span>',
+  '            <span class="value">Unlimited</span>',
   '          </div>',
   '        </div>',
   '',
@@ -2052,7 +1931,6 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '',
   '    <div id="toast"></div>',
   '  </div>',
-  '',
   '  <script nonce="CSP_NONCE_PLACEHOLDER">',
   '    window.CONFIG = {',
   '      uuid: "' + userID + '",',
@@ -2077,7 +1955,7 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + \' \' + sizes[i];',
   '    }',
   '',
-  'var QRCode=function(){"use strict";function e(e){this.mode=c.MODE_8BIT_BYTE,this.data=e,this.parsedData=[];for(var t=0,r=this.data.length;t<r;t++){var o=[],a=this.data.charCodeAt(t);a>65535?(o[0]=240|(a&1835008)>>>18,o[1]=128|(a&258048)>>>12,o[2]=128|(a&4032)>>>6,o[3]=128|a&63):a>2047?(o[0]=224|(a&61440)>>>12,o[1]=128|(a&4032)>>>6,o[2]=128|a&63):a>127?(o[0]=192|(a&1984)>>>6,o[1]=128|a&63):(o[0]=a),this.parsedData.push(o)}this.parsedData=Array.prototype.concat.apply([],this.parsedData),this.parsedData.length!=this.data.length&&(this.parsedData.unshift(191),this.parsedData.unshift(187),this.parsedData.unshift(239))}function t(e,t){this.typeNumber=e,this.errorCorrectLevel=t,this.modules=null,this.moduleCount=0,this.dataCache=null,this.dataList=[]}e.prototype={getLength:function(e){return this.parsedData.length},write:function(e){for(var t=0,r=this.parsedData.length;t<r;t++)e.put(this.parsedData[t],8)}}e.prototype.addData=function(e){var t=new e(e);this.dataList.push(t),this.dataCache=null},t.prototype.isDark=function(e,t){if(e<0||this.moduleCount<=e||t<0||this.moduleCount<=t)throw new Error(e+","+t);return this.modules[e][t]},t.prototype.getModuleCount=function(){return this.moduleCount},t.prototype.make=function(){this.makeImpl(!1,this.getBestMaskPattern())},t.prototype.makeImpl=function(e,t){this.moduleCount=4*this.typeNumber+17,this.modules=new Array(this.moduleCount);for(var r=0;r<this.moduleCount;r++){this.modules[r]=new Array(this.moduleCount);for(var o=0;o<this.moduleCount;o++)this.modules[r][o]=null}this.setupPositionProbePattern(0,0),this.setupPositionProbePattern(this.moduleCount-7,0),this.setupPositionProbePattern(0,this.moduleCount-7),this.setupPositionAdjustPattern(),this.setupTimingPattern(),this.setupTypeInfo(e,t),this.typeNumber>=7&&this.setupTypeNumber(e),null==this.dataCache&&(this.dataCache=t.createData(this.typeNumber,this.errorCorrectLevel,this.dataList)),this.mapData(this.dataCache,t)} ,t.prototype.setupPositionProbePattern=function(e,t){for(var r=e-1;r<=e+7;r++)if(!(r<0||this.moduleCount<=r))for(var o=t-1;o<=t+7;o++)o<0||this.moduleCount<=o||(r==e&&o==t||r==e+6&&o==t||r==e&&o==t+6||r==e+6&&o==t+6||r==e+2&&o==t+2||r==e+3&&o==t+2||r==e+4&&o==t+2||r==e+2&&o==t+3||r==e+3&&o==t+3||r==e+4&&o==t+3||r==e+2&&o==t+4||r==e+3&&o==t+4||r==e+4&&o==t+4?this.modules[r][o]=!1:this.modules[r][o]=!0)},t.prototype.setupPositionAdjustPattern=function(){for(var e=c.getPatternPosition(this.typeNumber),t=0;t<e.length;t++)for(var r=0;r<e.length;r++)if(t!=r||this.typeNumber>=7){var o=e[t],a=e[r];if(null==this.modules[o][a]){this.modules[o][a]=!0,this.modules[o-1][a]=!0,this.modules[o+1][a]=!0,this.modules[o][a-1]=!0,this.modules[o][a+1]=!0,this.modules[o-2][a-2]=!0,this.modules[o-2][a-1]=!0,this.modules[o-2][a]=!0,this.modules[o-2][a+1]=!0,this.modules[o-2][a+2]=!0,this.modules[o-1][a-2]=!0,this.modules[o-1][a+2]=!0,this.modules[o][a-2]=!0,this.modules[o][a+2]=!0,this.modules[o+1][a-2]=!0,this.modules[o+1][a+2]=!0,this.modules[o+2][a-2]=!0,this.modules[o+2][a-1]=!0,this.modules[o+2][a]=!0,this.modules[o+2][a+1]=!0,this.modules[o+2][a+2]=!0}}},t.prototype.setupTimingPattern=function(){for(var e=8;e<this.moduleCount-8;e++)null==this.modules[e][6]&&(this.modules[e][6]=e%2==0);for(var t=8;t<this.moduleCount-8;t++)null==this.modules[6][t]&&(this.modules[6][t]=t%2==0)},t.prototype.setupTypeNumber=function(e){for(var t=c.getBCHTypeNumber(this.typeNumber),r=0;r<18;r++){var o=!e&&1==(t>>r&1);this.modules[Math.floor(r/3)][r%3+this.moduleCount-8-3]=o}for(var r=0;r<18;r++){var o=!e&&1==(t>>r&1);this.modules[r%3+this.moduleCount-8-3][Math.floor(r/3)]=o}},t.prototype.setupTypeInfo=function(e,t){for(var r=this.errorCorrectLevel<<3|t,o=c.getBCHTypeInfo(r),a=0;a<15;a++){var i=!e&&1==(o>>a&1);a<6?this.modules[a][8]=i:a<8?this.modules[a+1][8]=i:this.modules[this.moduleCount-15+a][8]=i}for(var a=0;a<15;a++){var i=!e&&1==(o>>a&1);a<8?this.modules[8][this.moduleCount-a-1]=i:a<9?this.modules[8][15-a-1+1]=i:this.modules[8][15-a-1]=i}this.modules[this.moduleCount-8][8]=!e},t.prototype.mapData=function(e,t){for(var r=-1,o=this.moduleCount-1,a=7,i=0,n=this.moduleCount-1;n>0;n-=2)for(6==n&&n--; ; ){for(var s=0;s<2;s++)if(null==this.modules[o][n-s]){var u=!1;i<e.length&&(u=1==(e[i]>>>a&1)),c.getMask(t,o,n-s)&&(u=!u),this.modules[o][n-s]=u,a--,-1==a&&(i++,a=7)}if(o+=r,o<0||this.moduleCount<=o){o-=r,r=-r;break}}},t.PAD0=236,t.PAD1=17,t.createData=function(r,o,a){var i=c.getRSBlocks(r,o),n=new t;for(var s=0;s<a.length;s++){var u=a[s];n.addData(u.mode,u.getLength(),u),n.put(u.mode,4),n.put(u.getLength(),c.getLengthInBits(u.mode,r)),u.write(n)}var l=0;for(s=0;s<i.length;s++)l+=i[s].dataCount;for(s=0;s<n.getBuffer().length;s++)n.put(n.getBuffer()[s],8);var h=(l-n.getLengthInBits()/8)*8;n.put(0,4),n.put(h,c.getLengthInBits(4,r));for(var p=0;p<h/8;p++)n.put(t.PAD0,8);for(var d=0;d<i.length;d++){var f=i[d];for(p=0;p<f.totalCount-f.dataCount;p++)n.put(0,8)}var m=e.getErrorCorrectPolynomial(f.dataCount);for(p=0;p<f.dataCount;p++){var g=n.getBuffer()[p*f.dataCount+p];n.put(g,8)}var b=new Array(f.dataCount);for(p=0;p<f.dataCount;p++){var v=n.getBuffer()[p];b[p]=v&255;for(var y=0;y<m.getLength()-1;y++)b[p]^=e.gexp(e.glog[b[p]]+m.get(y))}for(p=0;p<f.dataCount;p++)n.put(b[p],8);return n.getBuffer()},t.createBytes=function(t,r){for(var o=0,a=0,i=0,n=new Array(r.length),s=new Array(r.length),u=0;u<r.length;u++){var l=r[u].dataCount,h=r[u].totalCount-l;a=Math.max(a,l),i=Math.max(i,h),n[u]=new Array(l);for(var p=0;p<l;p++)n[u][p]=255&t.buffer[p+o];o+=l;var d=c.getErrorCorrectPolynomial(h),f=(new e(n[u],d.getLength()-1)).mod(d);s[u]=new Array(d.getLength()-1);for(var p=0;p<s[u].length;p++){var m=p+f.getLength()-s[u].length;s[u][p]=m>=0?f.get(m):0}}for(var g=0,p=0;p<r.length;p++)g+=r[p].totalCount;for(var b=new Array(g),v=0,p=0;p<a;p++)for(var u=0;u<r.length;u++)p<n[u].length&&(b[v++]=n[u][p]);for(var p=0;p<i;p++)for(var u=0;u<r.length;u++)p<s[u].length&&(b[v++]=s[u][p]);return b};var r={MODE_NUMBER:1,MODE_ALPHA_NUM:2,MODE_8BIT_BYTE:4,MODE_KANJI:8},o={L:1,M:0,Q:3,H:2},a={PATTERN000:0,PATTERN001:1,PATTERN010:2,PATTERN011:3,PATTERN100:4,PATTERN101:5,PATTERN110:6,PATTERN111:7},c={PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],G15:1335,G18:7973,G15_MASK:21522,getBCHTypeInfo:function(e){for(var t=e<<10;c.getBCHDigit(t)-c.getBCHDigit(c.G15)>=0;)t^=c.G15<<c.getBCHDigit(t)-c.getBCHDigit(c.G15);return(e<<10|t)^c.G15_MASK},getBCHTypeNumber:function(e){for(var t=e<<12;c.getBCHDigit(t)-c.getBCHDigit(c.G18)>=0;)t^=c.G18<<c.getBCHDigit(t)-c.getBCHDigit(c.G18);return e<<12|t},getBCHDigit:function(e){for(var t=0;0!=e;)t++,e>>>=1;return t},getPatternPosition:function(e){return c.PATTERN_POSITION_TABLE[e-1]},getMask:function(e,t,r){switch(e){case a.PATTERN000:return(t+r)%2==0;case a.PATTERN001:return t%2==0;case a.PATTERN010:return r%3==0;case a.PATTERN011:return(t+r)%3==0;case a.PATTERN100:return(Math.floor(t/2)+Math.floor(r/3))%2==0;case a.PATTERN101:return t*r%2+t*r%3==0;case a.PATTERN110:return(t*r%2+t*r%3)%2==0;case a.PATTERN111:return(t*r%3+(t+r)%2)%2==0;default:throw new Error("bad maskPattern:"+e)}},getErrorCorrectPolynomial:function(t){for(var r=new e([1],0),o=0;o<t;o++)r=r.multiply(new e([1,c.gexp(o)],0));return r},getLengthInBits:function(e,t){if(1<=t&&t<10)switch(e){case r.MODE_NUMBER:return 10;case r.MODE_ALPHA_NUM:return 9;case r.MODE_8BIT_BYTE:return 8;case r.MODE_KANJI:return 8;default:throw new Error("mode:"+e)}else if(t<27)switch(e){case r.MODE_NUMBER:return 12;case r.MODE_ALPHA_NUM:return 11;case r.MODE_8BIT_BYTE:return 16;case r.MODE_KANJI:return 10;default:throw new Error("mode:"+e)}else{if(!(t<41))throw new Error("type:"+t);switch(e){case r.MODE_NUMBER:return 14;case r.MODE_ALPHA_NUM:return 13;case r.MODE_8BIT_BYTE:return 16;case r.MODE_KANJI:return 12;default:throw new Error("mode:"+e)}}},gexp:function(e){for(;e<0;)e+=255;for(;e>=256;)e-=255;return c.EXP_TABLE[e]},glog:function(e){if(e<1)throw new Error("glog("+e+")");return c.LOG_TABLE[e]},getRSBlocks:function(e,t){switch(t){case o.L:return c.RS_BLOCK_TABLE[4*(e-1)+0];case o.M:return c.RS_BLOCK_TABLE[4*(e-1)+1];case o.Q:return c.RS_BLOCK_TABLE[4*(e-1)+2];case o.H:return c.RS_BLOCK_TABLE[4*(e-1)+3];default:throw new Error("bad rs block @ typeNumber: "+e+"/errorCorrectLevel: "+t)}}};c.EXP_TABLE=new Array(256);for(var i=0;i<8;i++)c.EXP_TABLE[i]=1<<i;for(var i=8;i<256;i++)c.EXP_TABLE[i]=c.EXP_TABLE[i-4]^c.EXP_TABLE[i-5]^c.EXP_TABLE[i-6]^c.EXP_TABLE[i-8];c.LOG_TABLE=new Array(256);for(var i=0;i<255;i++)c.LOG_TABLE[c.EXP_TABLE[i]]=i;var n={create:function(e){if(void 0==e||""==e)return new n;var r=new t(1,o.H,[new e(e)]);return r},toCanvas:function(t,r,o,a,i){var s=n.create(r);if(t.nodeName.toUpperCase()=="CANVAS"){var u=t}else{var u=document.createElement("canvas");t.appendChild(u)}o&&(u.style.width=o,u.style.height=o);var l=s.getModuleCount(),h=o?o/l:a?a:Math.max(1,Math.floor(l/100)),p=Math.floor(l*h),d=Math.floor((p-l*h)/2);u.width=p,u.height=p;var f=u.getContext("2d");f.clearRect(0,0,p,p),i&&f.fillStyle=i,f.fillRect(0,0,p,p),f.fillStyle="#000000";for(var m=0;m<l;m++)for(var g=0;g<l;g++)s.isDark(m,g)&&f.fillRect(Math.floor(m*h)+d,Math.floor(g*h)+d,h,h);return u},toDataURL:function(e,t,r){var o=n.create(e).getModuleCount(),a=document.createElement("canvas");a.width=o,a.height=o;var i=a.getContext("2d");i.fillStyle=t?t:"#FFFFFF",i.fillRect(0,0,o,o),i.fillStyle=r?r:"#000000";for(var s=0;s<o;s++)for(var u=0;u<o;u++)n.isDark(s,u)&&i.fillRect(s,u,1,1);return a.toDataURL("image/png")}};return n}();',
+  '    var QRCode=function(){"use strict";function e(e){this.mode=c.MODE_8BIT_BYTE,this.data=e,this.parsedData=[];for(var t=0,r=this.data.length;t<r;t++){var o=[],a=this.data.charCodeAt(t);a>65535?(o[0]=240|(a&1835008)>>>18,o[1]=128|(a&258048)>>>12,o[2]=128|(a&4032)>>>6,o[3]=128|a&63):a>2047?(o[0]=224|(a&61440)>>>12,o[1]=128|(a&4032)>>>6,o[2]=128|a&63):a>127?(o[0]=192|(a&1984)>>>6,o[1]=128|a&63):(o[0]=a),this.parsedData.push(o)}this.parsedData=Array.prototype.concat.apply([],this.parsedData),this.parsedData.length!=this.data.length&&(this.parsedData.unshift(191),this.parsedData.unshift(187),this.parsedData.unshift(239))}function t(e,t){this.typeNumber=e,this.errorCorrectLevel=t,this.modules=null,this.moduleCount=0,this.dataCache=null,this.dataList=[]}e.prototype={getLength:function(e){return this.parsedData.length},write:function(e){for(var t=0,r=this.parsedData.length;t<r;t++)e.put(this.parsedData[t],8)}}e.prototype.addData=function(e){var t=new e(e);this.dataList.push(t),this.dataCache=null},t.prototype.isDark=function(e,t){if(e<0||this.moduleCount<=e||t<0||this.moduleCount<=t)throw new Error(e+","+t);return this.modules[e][t]},t.prototype.getModuleCount=function(){return this.moduleCount},t.prototype.make=function(){this.makeImpl(!1,this.getBestMaskPattern())},t.prototype.makeImpl=function(e,t){this.moduleCount=4*this.typeNumber+17,this.modules=new Array(this.moduleCount);for(var r=0;r<this.moduleCount;r++){this.modules[r]=new Array(this.moduleCount);for(var o=0;o<this.moduleCount;o++)this.modules[r][o]=null}this.setupPositionProbePattern(0,0),this.setupPositionProbePattern(this.moduleCount-7,0),this.setupPositionProbePattern(0,this.moduleCount-7),this.setupPositionAdjustPattern(),this.setupTimingPattern(),this.setupTypeInfo(e,t),this.typeNumber>=7&&this.setupTypeNumber(e),null==this.dataCache&&(this.dataCache=t.createData(this.typeNumber,this.errorCorrectLevel,this.dataList)),this.mapData(this.dataCache,t)} ,t.prototype.setupPositionProbePattern=function(e,t){for(var r=e-1;r<=e+7;r++)if(!(r<0||this.moduleCount<=r))for(var o=t-1;o<=t+7;o++)o<0||this.moduleCount<=o||(r==e&&o==t||r==e+6&&o==t||r==e&&o==t+6||r==e+6&&o==t+6||r==e+2&&o==t+2||r==e+3&&o==t+2||r==e+4&&o==t+2||r==e+2&&o==t+3||r==e+3&&o==t+3||r==e+4&&o==t+3||r==e+2&&o==t+4||r==e+3&&o==t+4||r==e+4&&o==t+4?this.modules[r][o]=!1:this.modules[r][o]=!0)},t.prototype.setupPositionAdjustPattern=function(){for(var e=c.getPatternPosition(this.typeNumber),t=0;t<e.length;t++)for(var r=0;r<e.length;r++)if(t!=r||this.typeNumber>=7){var o=e[t],a=e[r];if(null==this.modules[o][a]){this.modules[o][a]=!0,this.modules[o-1][a]=!0,this.modules[o+1][a]=!0,this.modules[o][a-1]=!0,this.modules[o][a+1]=!0,this.modules[o-2][a-2]=!0,this.modules[o-2][a-1]=!0,this.modules[o-2][a]=!0,this.modules[o-2][a+1]=!0,this.modules[o-2][a+2]=!0,this.modules[o-1][a-2]=!0,this.modules[o-1][a+2]=!0,this.modules[o][a-2]=!0,this.modules[o][a+2]=!0,this.modules[o+1][a-2]=!0,this.modules[o+1][a+2]=!0,this.modules[o+2][a-2]=!0,this.modules[o+2][a-1]=!0,this.modules[o+2][a]=!0,this.modules[o+2][a+1]=!0,this.modules[o+2][a+2]=!0}}},t.prototype.setupTimingPattern=function(){for(var e=8;e<this.moduleCount-8;e++)null==this.modules[e][6]&&(this.modules[e][6]=e%2==0);for(var t=8;t<this.moduleCount-8;t++)null==this.modules[6][t]&&(this.modules[6][t]=t%2==0)},t.prototype.setupTypeNumber=function(e){for(var t=c.getBCHTypeNumber(this.typeNumber),r=0;r<18;r++){var o=!e&&1==(t>>r&1);this.modules[Math.floor(r/3)][r%3+this.moduleCount-8-3]=o}for(var r=0;r<18;r++){var o=!e&&1==(t>>r&1);this.modules[r%3+this.moduleCount-8-3][Math.floor(r/3)]=o}},t.prototype.setupTypeInfo=function(e,t){for(var r=this.errorCorrectLevel<<3|t,o=c.getBCHTypeInfo(r),a=0;a<15;a++){var i=!e&&1==(o>>a&1);a<6?this.modules[a][8]=i:a<8?this.modules[a+1][8]=i:this.modules[this.moduleCount-15+a][8]=i}for(var a=0;a<15;a++){var i=!e&&1==(o>>a&1);a<8?this.modules[8][this.moduleCount-a-1]=i:a<9?this.modules[8][15-a-1+1]=i:this.modules[8][15-a-1]=i}this.modules[this.moduleCount-8][8]=!e},t.prototype.mapData=function(e,t){for(var r=-1,o=this.moduleCount-1,a=7,i=0,n=this.moduleCount-1;n>0;n-=2)for(6==n&&n--; ; ){for(var s=0;s<2;s++)if(null==this.modules[o][n-s]){var u=!1;i<e.length&&(u=1==(e[i]>>>a&1)),c.getMask(t,o,n-s)&&(u=!u),this.modules[o][n-s]=u,a--,-1==a&&(i++,a=7)}if(o+=r,o<0||this.moduleCount<=o){o-=r,r=-r;break}}},t.PAD0=236,t.PAD1=17,t.createData=function(r,o,a){var i=c.getRSBlocks(r,o),n=new t;for(var s=0;s<a.length;s++){var u=a[s];n.addData(u.mode,u.getLength(),u),n.put(u.mode,4),n.put(u.getLength(),c.getLengthInBits(u.mode,r)),u.write(n)}var l=0;for(s=0;s<i.length;s++)l+=i[s].dataCount;for(s=0;s<n.getBuffer().length;s++)n.put(n.getBuffer()[s],8);var h=(l-n.getLengthInBits()/8)*8;n.put(0,4),n.put(h,c.getLengthInBits(4,r));for(var p=0;p<h/8;p++)n.put(t.PAD0,8);for(var d=0;d<i.length;d++){var f=i[d];for(p=0;p<f.totalCount-f.dataCount;p++)n.put(0,8)}for(var m=e.getErrorCorrectPolynomial(f.dataCount);p< f.dataCount;p++){var g=n.getBuffer()[p];b[p]=g&255;for(var y=0;y<m.getLength()-1;y++)b[p]^=e.gexp(e.glog[b[p]]+m.get(y))}for(p=0;p<f.dataCount;p++)n.put(b[p],8);return n.getBuffer()},t.createBytes=function(t,r){for(var o=0,a=0,i=0,n=new Array(r.length),s=new Array(r.length),u=0;u<r.length;u++){var l=r[u].dataCount,h=r[u].totalCount-l;a=Math.max(a,l),i=Math.max(i,h),n[u]=new Array(l);for(var p=0;p<l;p++)n[u][p]=255&t.buffer[p+o];o+=l;var d=c.getErrorCorrectPolynomial(h),f=(new e(n[u],d.getLength()-1)).mod(d);s[u]=new Array(d.getLength()-1);for(var p=0;p<s[u].length;p++){var m=p+f.getLength()-s[u].length;s[u][p]=m>=0?f.get(m):0}}for(var g=0,p=0;p<r.length;p++)g+=r[p].totalCount;for(var b=new Array(g),v=0,p=0;p<a;p++)for(var u=0;u<r.length;u++)p<n[u].length&&(b[v++]=n[u][p]);for(var p=0;p<i;p++)for(var u=0;u<r.length;u++)p<s[u].length&&(b[v++]=s[u][p]);return b};var r={MODE_NUMBER:1,MODE_ALPHA_NUM:2,MODE_8BIT_BYTE:4,MODE_KANJI:8},o={L:1,M:0,Q:3,H:2},a={PATTERN000:0,PATTERN001:1,PATTERN010:2,PATTERN011:3,PATTERN100:4,PATTERN101:5,PATTERN110:6,PATTERN111:7},c={PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],G15:1335,G18:7973,G15_MASK:21522,getBCHTypeInfo:function(e){for(var t=e<<10;c.getBCHDigit(t)-c.getBCHDigit(c.G15)>=0;)t^=c.G15<<c.getBCHDigit(t)-c.getBCHDigit(c.G15);return(e<<10|t)^c.G15_MASK},getBCHTypeNumber:function(e){for(var t=e<<12;c.getBCHDigit(t)-c.getBCHDigit(c.G18)>=0;)t^=c.G18<<c.getBCHDigit(t)-c.getBCHDigit(c.G18);return e<<12|t},getBCHDigit:function(e){for(var t=0;0!=e;)t++,e>>>=1;return t},getPatternPosition:function(e){return c.PATTERN_POSITION_TABLE[e-1]},getMask:function(e,t,r){switch(e){case a.PATTERN000:return(t+r)%2==0;case a.PATTERN001:return t%2==0;case a.PATTERN010:return r%3==0;case a.PATTERN011:return(t+r)%3==0;case a.PATTERN100:return(Math.floor(t/2)+Math.floor(r/3))%2==0;case a.PATTERN101:return t*r%2+t*r%3==0;case a.PATTERN110:return(t*r%2+t*r%3)%2==0;case a.PATTERN111:return(t*r%3+(t+r)%2)%2==0;default:throw new Error("bad maskPattern:"+e)}},getErrorCorrectPolynomial:function(t){for(var r=new e([1],0),o=0;o<t;o++)r=r.multiply(new e([1,c.gexp(o)],0));return r},gexp:function(e){for(;e<0;)e+=255;for(;e>=256;)e-=255;return c.EXP_TABLE[e]},glog:function(e){if(e<1)throw new Error("glog("+e+")");return c.LOG_TABLE[e]},getRSBlocks:function(e,t){switch(t){case o.L:return c.RS_BLOCK_TABLE[4*(e-1)+0];case o.M:return c.RS_BLOCK_TABLE[4*(e-1)+1];case o.Q:return c.RS_BLOCK_TABLE[4*(e-1)+2];case o.H:return c.RS_BLOCK_TABLE[4*(e-1)+3];default:throw new Error("bad rs block @ typeNumber: "+e+"/errorCorrectLevel: "+t)}}};c.EXP_TABLE=new Array(256);for(var i=0;i<8;i++)c.EXP_TABLE[i]=1<<i;for(var i=8;i<256;i++)c.EXP_TABLE[i]=c.EXP_TABLE[i-4]^c.EXP_TABLE[i-5]^c.EXP_TABLE[i-6]^c.EXP_TABLE[i-8];c.LOG_TABLE=new Array(256);for(var i=0;i<255;i++)c.LOG_TABLE[c.EXP_TABLE[i]]=i;var n={create:function(e){if(void 0==e||""==e)return new n;var r=new t(1,o.H,[new e(e)]);return r},toCanvas:function(t,r,o,a,i){var s=n.create(r);if(t.nodeName.toUpperCase()=="CANVAS"){var u=t}else{var u=document.createElement("canvas");t.appendChild(u)}o&&(u.style.width=o,u.style.height=o);var l=s.getModuleCount(),h=o?o/l:a?a:Math.max(1,Math.floor(l/100)),p=Math.floor(l*h),d=Math.floor((p-l*h)/2);u.width=p,u.height=p;var f=u.getContext("2d");f.clearRect(0,0,p,p),i&&f.fillStyle=i,f.fillRect(0,0,p,p),f.fillStyle="#000000";for(var m=0;m<l;m++)for(var g=0;g<l;g++)s.isDark(m,g)&&f.fillRect(Math.floor(m*h)+d,Math.floor(g*h)+d,h,h);return u},toDataURL:function(e,t,r){var o=n.create(e).getModuleCount(),a=document.createElement("canvas");a.width=o,a.height=o;var i=a.getContext("2d");i.fillStyle=t?t:"#FFFFFF",i.fillRect(0,0,o,o),i.fillStyle=r?r:"#000000";for(var s=0;s<o;s++)for(var u=0;u<o;u++)n.isDark(s,u)&&i.fillRect(s,u,1,1);return a.toDataURL("image/png")}};return n}();',
   '',
   '    // =========================================',
   '    // UNIVERSAL QR CODE GENERATION',
@@ -2272,14 +2150,6 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '',
   '    function generateQRCode(text) {',
   '      QRGenerator.generate(text);',
-  '    }',
-  '',
-  '    function showToast(message, type = \'success\') {',
-  '      const toast = document.getElementById(\'toast\');',
-  '      toast.textContent = message;',
-  '      toast.className = type;',
-  '      toast.classList.add(\'show\');',
-  '      setTimeout(() => toast.classList.remove(\'show\'), 3500);',
   '    }',
   '',
   '    async function copyToClipboard(text, button) {',
@@ -2701,12 +2571,12 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '            animateProgressBar(usagePercentage);',
   '          }',
   '',
-  '          const usageStat = document.querySelector(\'.section-title span.muted\');',
+  '          const usageStat = document.getElementById(\'usage-percentage\');',
   '          if (usageStat) {',
   '            usageStat.textContent = usagePercentageDisplay + \' Used\';',
   '          }',
   '',
-  '          const usageText = document.querySelector(\'.progress-bar + p\');',
+  '          const usageText = document.getElementById(\'usage-text\');',
   '          if (usageText) {',
   '            usageText.textContent = formatBytes(data.traffic_used || 0) + \' of \' + (data.traffic_limit ? formatBytes(data.traffic_limit) : \'Unlimited\') + \' used\';',
   '          }',
@@ -2738,11 +2608,15 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '        });',
   '        ',
   '        document.getElementById(\'show-xray-config\').addEventListener(\'click\', () => {',
-  '          document.getElementById(\'xray-config\').classList.toggle(\'hidden\');',
+  '          const configEl = document.getElementById(\'xray-config\');',
+  '          configEl.textContent = window.CONFIG.singleXrayConfig;',
+  '          configEl.classList.toggle(\'hidden\');',
   '        });',
   '        ',
   '        document.getElementById(\'show-sb-config\').addEventListener(\'click\', () => {',
-  '          document.getElementById(\'sb-config\').classList.toggle(\'hidden\');',
+  '          const configEl = document.getElementById(\'sb-config\');',
+  '          configEl.textContent = window.CONFIG.singleSingboxConfig;',
+  '          configEl.classList.toggle(\'hidden\');',
   '        });',
   '        ',
   '        document.getElementById(\'qr-xray-sub-btn\').addEventListener(\'click\', () => {',
@@ -2774,12 +2648,18 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '          location.reload();  // Server-side, so reload',
   '        });',
   '        ',
+  '        document.getElementById(\'import-android\').href = window.CONFIG.clientUrls.universalAndroid;',
+  '        document.getElementById(\'import-ios-shadowrocket\').href = window.CONFIG.clientUrls.shadowrocket;',
+  '        document.getElementById(\'import-ios-streisand\').href = window.CONFIG.clientUrls.streisand;',
+  '        document.getElementById(\'import-karing\').href = window.CONFIG.clientUrls.karing;',
+  '        ',
   '        // Use server-injected geo data',
   '        const clientGeo = window.CLIENT_GEO;',
   '        const proxyGeo = window.PROXY_GEO;',
   '        const proxyIP = window.PROXY_IP;',
   '        const clientIp = window.CLIENT_IP;',
   '        ',
+  '        document.getElementById(\'proxy-host\').textContent = window.CONFIG.proxyAddress || \'Detection failed\';',
   '        document.getElementById(\'proxy-ip\').textContent = window.PROXY_IP || \'Detection failed\';',
   '        document.getElementById(\'proxy-location\').textContent = window.PROXY_GEO ? [window.PROXY_GEO.city, window.PROXY_GEO.country].filter(Boolean).join(\', \') : \'Detection failed\';',
   '        document.getElementById(\'client-ip\').textContent = window.CLIENT_IP || \'Detection failed\';',
@@ -2787,7 +2667,7 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '        document.getElementById(\'client-isp\').textContent = window.CLIENT_GEO ? window.CLIENT_GEO.isp : \'Detection failed\';',
   '        ',
   '        // Remove detecting class',
-  '        [\'proxy-ip\', \'proxy-location\', \'client-ip\', \'client-location\', \'client-isp\'].forEach(id => {',
+  '        [\'proxy-host\', \'proxy-ip\', \'proxy-location\', \'client-ip\', \'client-location\', \'client-isp\'].forEach(id => {',
   '          const el = document.getElementById(id);',
   '          if (el) el.classList.remove(\'detecting\');',
   '        });',
@@ -3063,6 +2943,112 @@ function handleUserPanel(userID, hostName, proxyAddress, userData) {
   '</body>',
   '</html>'
 ].join('\n');
+
+async function resolveProxyIP(proxyHost) {
+  const ipv4Regex = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+  const ipv6Regex = /^\[?[0-9a-fA-F:]+\]?$/;
+
+  if (ipv4Regex.test(proxyHost) || ipv6Regex.test(proxyHost)) {
+    return proxyHost;
+  }
+
+  const dnsAPIs = [
+    { url: `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(proxyHost)}&type=A`, parse: data => data.Answer?.find(a => a.type === 1)?.data },
+    { url: `https://dns.google/resolve?name=${encodeURIComponent(proxyHost)}&type=A`, parse: data => data.Answer?.find(a => a.type === 1)?.data },
+    { url: `https://1.1.1.1/dns-query?name=${encodeURIComponent(proxyHost)}&type=A`, parse: data => data.Answer?.find(a => a.type === 1)?.data }
+  ];
+
+  for (const api of dnsAPIs) {
+    try {
+      const response = await fetch(api.url, { headers: { 'accept': 'application/dns-json' } });
+      if (response.ok) {
+        const data = await response.json();
+        const ip = api.parse(data);
+        if (ip && ipv4Regex.test(ip)) return ip;
+      }
+    } catch (e) {
+      // Silent fail
+    }
+  }
+  return proxyHost; // Fallback to host if resolution fails
+}
+
+async function getGeo(ip) {
+  const geoAPIs = [
+    { url: `https://ipapi.co/${ip}/json/`, parse: data => ({ city: data.city || '', country: data.country_name || '', isp: data.org || '' }) },
+    { url: `https://ip-api.com/json/${ip}?fields=status,message,city,country,isp`, parse: data => data.status !== 'fail' ? ({ city: data.city || '', country: data.country || '', isp: data.isp || '' }) : null },
+    { url: `https://ipwho.is/${ip}`, parse: data => data.success ? ({ city: data.city || '', country: data.country || '', isp: data.connection?.isp || '' }) : null },
+    { url: `https://freegeoip.app/json/${ip}`, parse: data => ({ city: data.city || '', country: data.country_name || '', isp: '' }) },
+    { url: `https://ipapi.is/${ip}.json`, parse: data => ({ city: data.location?.city || '', country: data.location?.country || '', isp: data.asn?.org || '' }) },
+    { url: `https://freeipapi.com/api/json/${ip}`, parse: data => ({ city: data.cityName || '', country: data.countryName || '', isp: '' }) }
+  ];
+
+  for (const api of geoAPIs) {
+    try {
+      const response = await fetch(api.url);
+      if (response.ok) {
+        const data = await response.json();
+        const geo = api.parse(data);
+        if (geo && (geo.city || geo.country)) return geo;
+      }
+    } catch (e) {
+      // Silent fail
+    }
+  }
+  return null;
+}
+
+function handleUserPanel(userID, hostName, proxyAddress, userData) {
+  const subXrayUrl = `https://${hostName}/xray/${userID}`;
+  const subSbUrl = `https://${hostName}/sb/${userID}`;
+  
+  const singleXrayConfig = buildLink({ 
+    core:'xray', proto: 'tls', userID, hostName, address: hostName, port: 443, tag: 'Main'  });
+  
+  const singleSingboxConfig = buildLink({ 
+    core: 'sb', proto: 'tls', userID, hostName, address: hostName, port: 443, tag: 'Main'
+  });
+
+  const clientUrls = {
+    universalAndroid: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    windows: `clash://install-config?url=${encodeURIComponent(subSbUrl)}`,
+    macos: `clash://install-config?url=${encodeURIComponent(subSbUrl)}`,
+    karing: `karing://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    shadowrocket: `shadowrocket://add/sub?url=${encodeURIComponent(subXrayUrl)}&name=${encodeURIComponent(hostName)}`,
+    streisand: `streisand://install-config?url=${encodeURIComponent(subXrayUrl)}`
+  };
+
+  const isUserExpired = isExpired(userData.expiration_date, userData.expiration_time);
+  const expirationDateTime = userData.expiration_date && userData.expiration_time 
+    ? `${userData.expiration_date}T${userData.expiration_time}Z` 
+    : null;
+
+  let usagePercentage = 0;
+  if (userData.traffic_limit && userData.traffic_limit > 0) {
+    usagePercentage = Math.min(((userData.traffic_used || 0) / userData.traffic_limit) * 100, 100);
+  }
+
+  let usagePercentageDisplay;
+  if (usagePercentage > 0 && usagePercentage < 0.01) {
+    usagePercentageDisplay = '< 0.01%';
+  } else if (usagePercentage === 0) {
+    usagePercentageDisplay = '0%';
+  } else if (usagePercentage === 100) {
+    usagePercentageDisplay = '100%';
+  } else {
+    usagePercentageDisplay = `${usagePercentage.toFixed(2)}%`;
+  }
+
+  // Server-side geo detection
+  const proxyHost = proxyAddress.split(':')[0];
+  const proxyIP = await resolveProxyIP(proxyHost);
+  const clientIp = request.headers.get('CF-Connecting-IP');
+  const clientGeo = await getGeo(clientIp);
+  const proxyGeo = await getGeo(proxyIP);
+
+  const clientLocation = clientGeo ? [clientGeo.city, clientGeo.country].filter(Boolean).join(', ') : 'Detection failed';
+  const clientIsp = clientGeo ? clientGeo.isp : 'Detection failed';
+  const proxyLocation = proxyGeo ? [proxyGeo.city, proxyGeo.country].filter(Boolean).join(', ') : 'Detection failed';
 
   const nonce = generateNonce();
   const headers = new Headers({ 'Content-Type': 'text/html;charset=utf-8' });
@@ -3430,44 +3416,43 @@ function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
 
 async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader, retry, log, trafficCallback) {
   let hasIncomingData = false;
-  try {
-    await remoteSocket.readable.pipeTo(
+  await remoteSocket.readable
+    .pipeTo(
       new WritableStream({
-        async write(chunk) {
-          if (webSocket.readyState !== CONST.WS_READY_STATE_OPEN)
-            throw new Error('WebSocket is not open');
-          hasIncomingData = true;
-          
-          if (trafficCallback) {
-            trafficCallback(chunk.byteLength);
+        async write(chunk, controller) {
+          if (webSocket.readyState !== CONST.WS_READY_STATE_OPEN) {
+            controller.error(
+              'webSocket.readyState is not open, maybe close',
+            );
+            return;
           }
-          
-          const dataToSend = protocolResponseHeader
-            ? await new Blob([protocolResponseHeader, chunk]).arrayBuffer()
-            : chunk;
-          webSocket.send(dataToSend);
-          protocolResponseHeader = null;
+          hasIncomingData = true;
+          // remoteChunkCount++;
+          if (protocolResponseHeader) {
+            webSocket.send(
+              await new Blob([protocolResponseHeader, chunk]).arrayBuffer(),
+            );
+            protocolResponseHeader = null;
+          } else {
+            webSocket.send(chunk);
+          }
         },
         close() {
-          log(`Remote connection readable closed. Had incoming data: ${hasIncomingData}`);
+          log(`remoteSocket.readable closed, hasIncomingData: ${hasIncomingData}`);
         },
         abort(reason) {
-          console.error('Remote connection readable aborted:', reason);
+          console.error('remoteSocket.readable abort', reason);
         },
       }),
-    );
-  } catch (error) {
-    console.error('RemoteSocketToWS error:', error.stack || error);
-    safeCloseWebSocket(webSocket);
-  }
-  if (!hasIncomingData && retry) {
-    log('No incoming data, retrying');
-    try {
-        await retry();
-    } catch(e) {
-        console.error('Retry failed:', e);
-    }
-  }
+    )
+    .catch((error) => {
+      console.error(
+        'remoteSocket.readable pipeTo error',
+        error,
+      );
+      safeCloseWebSocket(webSocket);
+    });
+  return hasIncomingData;
 }
 
 function base64ToArrayBuffer(base64Str) {
@@ -3689,6 +3674,7 @@ function socks5AddressParser(address) {
     throw new Error('Invalid SOCKS5 address format');
   }
   const [authPart, hostPart] = address.includes('@') ? address.split('@') : [null, address];
+  [authPart, hostPart] = address.includes('@') ? address.split('@') : [null, address];
   const lastColonIndex = hostPart.lastIndexOf(':');
 
   if (lastColonIndex === -1) {
