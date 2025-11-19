@@ -1335,7 +1335,7 @@ async function handleAdminRequest(request, env, ctx, adminPrefix) {
   const url = new URL(request.url);
   const jsonHeader = { 'Content-Type': 'application/json' };
   const htmlHeaders = new Headers({ 'Content-Type': 'text/html;charset=utf-8' });
-  const clientIp = request.headers.get('CF-Connecting-IP');
+  const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';  // Fallback for safety
 
   if (!env.ADMIN_KEY) {
     addSecurityHeaders(htmlHeaders, null, {});
@@ -2868,9 +2868,10 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '        }',
   '',
   '        updateExpirationDisplay();',
-  '        showToast(\'Panel auto-refreshed\', \'success\');',
+  '        showToast(\'Panel auto-refreshed successfully\', \'success\');',
   '      } catch (error) {',
   '        console.error(\'Auto-refresh error:\', error);',
+  '        showToast(\'Auto-refresh failed: \' + error.message, \'error\');',
   '      }',
   '    }',
   '',
@@ -3237,7 +3238,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
 // ============================================================================
 
 async function ProtocolOverWSHandler(request, config, env, ctx) {
-  const clientIp = request.headers.get('CF-Connecting-IP');
+  const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';  // Fallback
   if (await isSuspiciousIP(clientIp, config.scamalytics, env.SCAMALYTICS_THRESHOLD || CONST.SCAMALYTICS_THRESHOLD)) {
     return new Response('Access denied', { status: 403 });
   }
@@ -3897,6 +3898,7 @@ async function performHealthCheck(env, ctx) {
       if (response.ok) {
         latency = Date.now() - start;
         isHealthy = 1;
+        console.log(`Health check success for ${ipPort}: Latency ${latency}ms`);  // Enhanced logging
       }
     } catch (e) {
       console.error(`Health check failed for ${ipPort}: ${e.message}`);
@@ -3920,6 +3922,9 @@ async function performHealthCheck(env, ctx) {
 
 export default {
   async fetch(request, env, ctx) {
+    // Declare clientIp at the top to ensure scope availability (fixes ts(2304))
+    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+
     let cfg;
     
     try {
@@ -3932,7 +3937,6 @@ export default {
     }
 
     const url = new URL(request.url);
-    const clientIp = request.headers.get('CF-Connecting-IP');
 
     const adminPrefix = env.ADMIN_PATH_PREFIX || 'admin';
     
