@@ -118,7 +118,7 @@ function addSecurityHeaders(headers, nonce, cspDomains = {}) {
     "frame-ancestors 'none'",
     "base-uri 'self'",
     nonce ? `script-src 'nonce-${nonce}' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com` : "script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com 'unsafe-inline'",
-    nonce ? `style-src 'nonce-${nonce}' 'unsafe-inline' 'unsafe-hashes'` : "style-src 'self' 'unsafe-inline' 'unsafe-hashes'",
+    "style-src 'self' 'unsafe-inline' 'unsafe-hashes'",
     `img-src 'self' data: https: blob: ${cspDomains.img || ''}`.trim(),
     `connect-src 'self' https: ${cspDomains.connect || ''}`.trim(),
   ];
@@ -1801,7 +1801,6 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
       <div class="progress-bar">
         <div class="progress-fill ${progressClass}" 
              id="progress-bar-fill"
-             style="width: 0%"
              data-target-width="${usagePercentage.toFixed(2)}"></div>
       </div>
       <p class="muted text-center mb-2">${usage} of ${limit} used</p>
@@ -4038,7 +4037,9 @@ export default {
       // Domain Fronting: Set random Host header from HOST_HEADERS
       const hostHeaders = env.HOST_HEADERS ? env.HOST_HEADERS.split(',').map(h => h.trim()) : ['speed.cloudflare.com'];
       const evasionHost = pick(hostHeaders);
-      request.headers.set('Host', evasionHost);
+      const newHeaders = new Headers(request.headers);
+      newHeaders.set('Host', evasionHost);
+      const newRequest = new Request(request, { headers: newHeaders });
       
       const requestConfig = {
         userID: cfg.userID,
@@ -4051,7 +4052,7 @@ export default {
         scamalytics: cfg.scamalytics,
       };
       
-      const wsResponse = await ProtocolOverWSHandler(request, requestConfig, env, ctx);
+      const wsResponse = await ProtocolOverWSHandler(newRequest, requestConfig, env, ctx);
       
       const headers = new Headers(wsResponse.headers);
       addSecurityHeaders(headers, null, {});
