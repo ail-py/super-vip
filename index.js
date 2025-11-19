@@ -1381,7 +1381,7 @@ async function handleAdminRequest(request, env, ctx, adminPrefix) {
   const adminSubPath = url.pathname.substring(adminBasePath.length) || '/';
 
   if (adminSubPath.startsWith('/api/')) {
-    if (!(await isAdmin(request, env))) {
+    if (!(await isAdmin(request, env)) ) {
       const headers = new Headers(jsonHeader);
       addSecurityHeaders(headers, null, {});
       return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers });
@@ -1884,6 +1884,14 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '      .info-grid{grid-template-columns:1fr}',
   '      .btn{padding:9px 12px;font-size:13px}',
   '    }',
+  '    /* New classes for migrated inline styles */',
+  '    .sub-title { font-size:16px; margin:12px 0 8px; color:var(--accent-2); }',
+  '    .qr-buttons { justify-content:center; margin-top:16px; }',
+  '    .mt-12 { margin-top:12px; }',
+  '    .uuid-value { font-family:var(--mono); font-size:12px; word-break:break-all; }',
+  '    .expiry-utc { font-size:13px; margin-top:4px; }',
+  '    .no-margin { margin:0; }',
+  '    .progress-fill-initial { width: 0%; }',
   '  </style>',
   '</head>',
   '<body>',
@@ -1919,7 +1927,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '      <div class="progress-bar">' +
   '        <div class="progress-fill ' + (usagePercentage > 80 ? 'high' : usagePercentage > 50 ? 'medium' : 'low') + '" ' +
   '             id="progress-bar-fill"' +
-  '             style="width: 0%"' +
+  '             class="progress-fill-initial"' +
   '             data-target-width="' + usagePercentage.toFixed(2) + '"></div>' +
   '      </div>' +
   '      <p class="muted text-center mb-2">' + await formatBytes(userData.traffic_used || 0) + ' of ' + await formatBytes(userData.traffic_limit) + ' used</p>' +
@@ -1933,7 +1941,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '      </div>' +
   '      <div id="expiration-display" data-expiry="' + expirationDateTime + '">' +
   '        <p class="muted" id="expiry-local">Loading expiration time...</p>' +
-  '        <p class="muted" id="expiry-utc" style="font-size:13px;margin-top:4px"></p>' +
+  '        <p class="muted expiry-utc" id="expiry-utc"></p>' +
   '      </div>' +
  (isUserExpired ? 
   '      <div class="expiry-warning">' +
@@ -1991,7 +1999,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '',
   '          <div class="stack">',
   '            <div>',
-  '              <h3 style="font-size:16px;margin:12px 0 8px;color:var(--accent-2)">Xray / V2Ray Subscription</h3>',
+  '              <h3 class="sub-title">Xray / V2Ray Subscription</h3>',
   '              <div class="buttons">',
   '                <button class="btn primary" id="copy-xray-sub">📋 Copy Xray Link</button>',
   '                <button class="btn ghost" id="show-xray-config">View Config</button>',
@@ -2001,7 +2009,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '            </div>',
   '',
   '            <div>',
-  '              <h3 style="font-size:16px;margin:12px 0 8px;color:var(--accent-2)">Sing-Box / Clash Subscription</h3>',
+  '              <h3 class="sub-title">Sing-Box / Clash Subscription</h3>',
   '              <div class="buttons">',
   '                <button class="btn primary" id="copy-sb-sub">📋 Copy Singbox Link</button>',
   '                <button class="btn ghost" id="show-sb-config">View Config</button>',
@@ -2011,7 +2019,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '            </div>',
   '',
   '            <div>',
-  '              <h3 style="font-size:16px;margin:12px 0 8px;color:var(--accent-2)">Quick Import</h3>',
+  '              <h3 class="sub-title">Quick Import</h3>',
   '              <div class="buttons">',
   '                <a href="' + clientUrls.universalAndroid + '" rel="noopener noreferrer" class="btn ghost">📱 Android (V2rayNG)</a>',
   '                <a href="' + clientUrls.shadowrocket + '" rel="noopener noreferrer" class="btn ghost">🍎 iOS (Shadowrocket)</a>',
@@ -2030,7 +2038,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '          <div id="qr-display" class="text-center">',
   '            <p class="muted">Click any "QR Code" button to generate a scannable code.</p>',
   '          </div>',
-  '          <div class="buttons" style="justify-content:center;margin-top:16px">',
+  '          <div class="buttons qr-buttons">',
   '            <button class="btn ghost small" id="qr-xray-config-btn">Xray Config QR</button>',
   '            <button class="btn ghost small" id="qr-sb-config-btn">Singbox Config QR</button>',
   '          </div>',
@@ -2038,21 +2046,21 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '',
   '        <div class="card">',
   '          <h2>👤 Account Details</h2>',
-  '          <div class="info-item" style="margin-top:12px">',
+  '          <div class="info-item mt-12">',
   '            <span class="label">User UUID</span>',
-  '            <span class="value" style="font-family:var(--mono);font-size:12px;word-break:break-all">' + userID + '</span>',
+  '            <span class="value uuid-value">' + userID + '</span>',
   '          </div>',
-  '          <div class="info-item" style="margin-top:12px">',
+  '          <div class="info-item mt-12">',
   '            <span class="label">Created Date</span>',
   '            <span class="value">' + new Date(userData.created_at).toLocaleDateString() + '</span>',
   '          </div>',
  (userData.notes ? 
-  '          <div class="info-item" style="margin-top:12px">' +
+  '          <div class="info-item mt-12">' +
   '            <span class="label">Notes</span>' +
   '            <span class="value">' + escapeHTML(userData.notes) + '</span>' +
   '          </div>'
   : '') ,
-  '          <div class="info-item" style="margin-top:12px">',
+  '          <div class="info-item mt-12">',
   '            <span class="label">IP Limit</span>',
   '            <span class="value">' + (userData.ip_limit === -1 ? 'Unlimited' : userData.ip_limit) + '</span>',
   '          </div>',
@@ -2070,7 +2078,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '    </div>',
   '',
   '    <div class="card">',
-  '      <p class="muted text-center" style="margin:0">',
+  '      <p class="muted text-center no-margin">',
   '        🔒 This is your personal configuration panel. Keep your subscription links private and secure.',
   '        <br>For support or questions, contact your service administrator.',
   '      </p>',
@@ -2932,6 +2940,13 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '        });',
   '        ',
   '        // Use server-injected geo data',
+  '        document.getElementById(\'proxy-ip\').textContent = window.PROXY_IP || \'Detection failed\';',
+  '        document.getElementById(\'proxy-location\').textContent = window.PROXY_GEO ? [window.PROXY_GEO.city, window.PROXY_GEO.country].filter(Boolean).join(\', \') : \'Detection failed\';',
+  '        document.getElementById(\'client-ip\').textContent = window.CLIENT_IP || \'Detection failed\';',
+  '        document.getElementById(\'client-location\').textContent = window.CLIENT_GEO ? [window.CLIENT_GEO.city, window.CLIENT_GEO.country].filter(Boolean).join(\', \') : \'Detection failed\';',
+  '        document.getElementById(\'client-isp\').textContent = window.CLIENT_GEO ? window.CLIENT_GEO.isp : \'Detection failed\';',
+  '        ',
+  '        // Remove detecting class',
   '        [\'proxy-ip\', \'proxy-location\', \'client-ip\', \'client-location\', \'client-isp\'].forEach(id => {',
   '          const el = document.getElementById(id);',
   '          if (el) el.classList.remove(\'detecting\');',
@@ -3023,14 +3038,14 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '            };',
   '        }',
   '',
-  '        let updateDOM = function(data) {',
+  '        let updateDOM = async function(data) {',  // Made async
   '            const usageEl = document.querySelector(CONFIG.DOM_SELECTORS.usage);',
   '            const timeEl = document.querySelector(CONFIG.DOM_SELECTORS.time);',
   '            const statusEl = document.querySelector(CONFIG.DOM_SELECTORS.status);',
   '',
   '            if (usageEl && data.usedMB && data.limitMB) {',
   '                const percentage = ((data.usedMB / data.limitMB) * 100).toFixed(1);',
-  '                usageEl.textContent = formatBytes(data.usedMB) || \'0 Bytes\';',
+  '                usageEl.textContent = await formatBytes(data.usedMB) || \'0 Bytes\';',
   '                const usageStat = document.querySelector(\'.section-title span.muted\');',
   '                if (usageStat) {',
   '                    usageStat.textContent = percentage + \'% Used\';',
@@ -3043,7 +3058,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '                }',
   '                const usageText = document.querySelector(\'.progress-bar + p\');',
   '                if (usageText) {',
-  '                    usageText.textContent = formatBytes(data.usedMB) + \' of \' + formatBytes(data.limitMB) + \' used\';',
+  '                    usageText.textContent = await formatBytes(data.usedMB) + \' of \' + await formatBytes(data.limitMB) + \' used\';',
   '                }',
   '            }',
   '            if (timeEl && data.expires) {',
@@ -3127,7 +3142,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '            try {',
   '                const data = await fetchData();',
   '                if (data) {',
-  '                    updateDOM(data);',
+  '                    await updateDOM(data);',  // Await async updateDOM
   '                    console.debug(\'Data updated successfully\');',
   '                }',
   '                currentBackoff = CONFIG.INITIAL_BACKOFF_MS;',
@@ -3184,8 +3199,8 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   '',
   '        // Override updateDOM to track changes',
   '        const originalUpdateDOM = updateDOM;',
-  '        updateDOM = function(data) {',
-  '            originalUpdateDOM(data);',
+  '        updateDOM = async function(data) {',  // Async
+  '            await originalUpdateDOM(data);',  // Await if needed, but original is now async
   '            const hasChanged = true; // Assume change for safety; can refine with diff',
   '            adjustPollingRate(hasChanged);',
   '        };',
@@ -3240,7 +3255,7 @@ async function ProtocolOverWSHandler(request, config, env, ctx) {
   webSocket.accept();
 
   let address = '';
-  let portWithRandomRandomLog = '';
+  let portWithRandomLog = '';
   let sessionUsage = 0;
   let userUUID = '';
   let udpStreamWriter = null;
@@ -4047,7 +4062,7 @@ export default {
       return await handleSubscription('sb');
     }
 
-    const path = url.pathname.substring(1);
+    const path = url.pathname.slice(1);
     if (isValidUUID(path)) {
       const rateLimitKey = `user_path_rate:${clientIp}`;
       if (await checkRateLimit(env.DB, rateLimitKey, CONST.USER_PATH_RATE_LIMIT, CONST.USER_PATH_RATE_TTL)) {
