@@ -2020,7 +2020,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
  (userData.notes ? 
   '          <div class="info-item" style="margin-top:12px">' +
   '            <span class="label">Notes</span>' +
-  '            <span class="value">' + escapeHTML(userData.notes) + '</span>',
+  '            <span class="value">' + escapeHTML(userData.notes) + '</span>' +
   '          </div>'
   : '') ,
   '          <div class="info-item" style="margin-top:12px">',
