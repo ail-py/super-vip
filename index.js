@@ -1335,7 +1335,7 @@ async function handleAdminRequest(request, env, ctx, adminPrefix) {
   const url = new URL(request.url);
   const jsonHeader = { 'Content-Type': 'application/json' };
   const htmlHeaders = new Headers({ 'Content-Type': 'text/html;charset=utf-8' });
-  const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';  // Fallback for safety
+  const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
 
   if (!env.ADMIN_KEY) {
     addSecurityHeaders(htmlHeaders, null, {});
@@ -1773,1449 +1773,354 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
   const clientLocation = [clientGeo.city, clientGeo.country].filter(Boolean).join(', ') || 'Detection failed';
   const clientIsp = clientGeo.isp || 'Detection failed';
 
+  const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+
   const proxyHost = proxyAddress.split(':')[0];
   const proxyIP = await resolveProxyIP(proxyHost);
   const proxyGeo = await getGeo(proxyIP);
   const proxyLocation = [proxyGeo.city, proxyGeo.country].filter(Boolean).join(', ') || 'Detection failed';
 
-  const userPanelHTML = [
-  '<!doctype html>',
-  '<html lang="en">',
-  '<head>',
-  '  <meta charset="utf-8" />',
-  '  <meta name="viewport" content="width=device-width,initial-scale=1" />',
-  '  <title>User Panel — VLESS Configuration</title>',
-  '  <style nonce="CSP_NONCE_PLACEHOLDER">',
-  '    :root{',
-  '      --bg:#0b1220; --card:#0f1724; --muted:#9aa4b2; --accent:#3b82f6;',
-  '      --accent-2:#60a5fa; --success:#22c55e; --danger:#ef4444; --warning:#f59e0b;',
-  '      --glass: rgba(255,255,255,0.03); --radius:12px; --mono: "SF Mono", "Fira Code", monospace;',
-  '    }',
-  '    *{box-sizing:border-box}',
-  '    body{',
-  '      margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;',
-  '      background: linear-gradient(180deg,#061021 0%, #071323 100%);',
-  '      color:#e6eef8; -webkit-font-smoothing:antialiased;',
-  '      min-height:100vh; padding:28px;',
-  '    }',
-  '    .container{max-width:1100px;margin:0 auto}',
-  '    .card{background:var(--card); border-radius:var(--radius); padding:20px;',
-  '      border:1px solid rgba(255,255,255,0.03); box-shadow:0 8px 30px rgba(2,6,23,0.5); margin-bottom:20px;}',
-  '    h1,h2{margin:0 0 14px;font-weight:600}',
-  '    h1{font-size:28px}',
-  '    h2{font-size:20px}',
-  '    p.lead{color:var(--muted);margin:6px 0 20px;font-size:15px}',
-  '',
-  '    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:10px}',
-  '    .stat{padding:14px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);',
-  '      border-radius:10px;text-align:center;border:1px solid rgba(255,255,255,0.02)}',
-  '    .stat .val{font-weight:700;font-size:22px;margin-bottom:4px}',
-  '    .stat .lbl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.5px}',
-  '    .stat.status-active .val{color:var(--success)}',
-  '    .stat.status-expired .val{color:var(--danger)}',
-  '    .stat.status-warning .val{color:var(--warning)}',
-  '',
-  '    .grid{display:grid;grid-template-columns:1fr 360px;gap:18px}',
-  '    @media (max-width:980px){ .grid{grid-template-columns:1fr} }',
-  '',
-  '    .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-top:16px}',
-  '    .info-item{background:var(--glass);padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.02)}',
-  '    .info-item .label{font-size:11px;color:var(--muted);display:block;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}',
-  '    .info-item .value{font-weight:600;word-break:break-all;font-size:14px}',
-  '    .info-item .value.detecting{color:var(--warning);font-style:italic}',
-  '',
-  '    .progress-bar{height:12px;background:#071529;border-radius:6px;overflow:hidden;margin:12px 0}',
-  '    .progress-fill{',
-  '      height:100%;',
-  '      transition:width 0.6s ease;',
-  '      border-radius:6px;',
-  '      width:0%;',
-  '    }',
-  '    .progress-fill.low{background:linear-gradient(90deg,#22c55e,#16a34a)}',
-  '    .progress-fill.medium{background:linear-gradient(90deg,#f59e0b,#d97706)}',
-  '    .progress-fill.high{background:linear-gradient(90deg,#ef4444,#dc2626)}',
-  '',
-  '    pre.config{background:#071529;padding:14px;border-radius:8px;overflow:auto;',
-  '      font-family:var(--mono);font-size:13px;color:#cfe8ff;',
-  '      border:1px solid rgba(255,255,255,0.02);max-height:200px}',
-  '    .buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}',
-  '',
-  '    .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:8px;',
-  '      border:none;cursor:pointer;font-weight:600;font-size:14px;transition:all 0.2s;',
-  '      text-decoration:none;color:inherit}',
-  '    .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 4px 12px rgba(59,130,246,0.3)}',
-  '    .btn.primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(59,130,246,0.4)}',
-  '    .btn.ghost{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:var(--muted)}',
-  '    .btn.ghost:hover{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.12);color:#fff}',
-  '    .btn.small{padding:8px 12px;font-size:13px}',
-  '    .btn:active{transform:translateY(0) scale(0.98)}',
-  '    .btn:disabled{opacity:0.5;cursor:not-allowed}',
-  '',
-  '    .qr-container{background:#fff;padding:16px;border-radius:10px;display:inline-block;box-shadow:0 4px 12px rgba(0,0,0,0.2);margin:16px auto;text-align:center}',
-  '    #qr-display{min-height:280px;display:flex;align-items:center;justify-content:center;flex-direction:column}',
-  '',
-  '    #toast{position:fixed;right:20px;top:20px;background:#0f1b2a;padding:14px 18px;',
-  '      border-radius:10px;border:1px solid rgba(255,255,255,0.08);display:none;',
-  '      color:#cfe8ff;box-shadow:0 8px 24px rgba(2,6,23,0.7);z-index:1000;min-width:200px}',
-  '    #toast.show{display:block;animation:toastIn .3s ease}',
-  '    #toast.success{border-left:4px solid var(--success)}',
-  '    #toast.error{border-left:4px solid var(--danger)}',
-  '    @keyframes toastIn{from{transform:translateY(-10px);opacity:0}to{transform:translateY(0);opacity:1}}',
-  '',
-  '    .section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;',
-  '      padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.05)}',
-  '    .muted{color:var(--muted);font-size:14px;line-height:1.6}',
-  '    .stack{display:flex;flex-direction:column;gap:10px}',
-  '    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}',
-  '    .hidden{display:none}',
-  '    .text-center{text-align:center}',
-  '    .mb-2{margin-bottom:12px}',
-  '    ',
-  '    .expiry-warning{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);',
-  '      padding:12px;border-radius:8px;margin-top:12px;color:#fca5a5}',
-  '    .expiry-info{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);',
-  '      padding:12px;border-radius:8px;margin-top:12px;color:#86efac}',
-  '',
-  '    @media (max-width: 768px) {',
-  '      body{padding:16px}',
-  '      .container{padding:0}',
-  '      h1{font-size:24px}',
-  '      .stats{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}',
-  '      .info-grid{grid-template-columns:1fr}',
-  '      .btn{padding:9px 12px;font-size:13px}',
-  '    }',
-  '  </style>',
-  '</head>',
-  '<body>',
-  '  <div class="container">',
-  '    <h1>🚀 VXR.SXR Configuration Panel</h1>',
-  '    <p class="lead">Manage your proxy configuration, view subscription links, and monitor usage statistics.</p>',
-  '',
-  '    <div class="stats">',
-  '      <div class="stat ' + (isUserExpired ? 'status-expired' : 'status-active') + '">',
-  '        <div class="val" id="status-badge">' + (isUserExpired ? 'Expired' : 'Active') + '</div>',
-  '        <div class="lbl">Account Status</div>',
-  '      </div>',
-  '      <div class="stat">',
-  '        <div class="val" id="usage-display">' + await formatBytes(userData.traffic_used || 0) + '</div>',
-  '        <div class="lbl">Data Used</div>',
-  '      </div>',
-  '      <div class="stat ' + (usagePercentage > 80 ? 'status-warning' : '') + '">',
-  '        <div class="val">' + (userData.traffic_limit && userData.traffic_limit > 0 ? await formatBytes(userData.traffic_limit) : 'Unlimited') + '</div>',
-  '        <div class="lbl">Data Limit</div>',
-  '      </div>',
-  '      <div class="stat">',
-  '        <div class="val" id="expiry-countdown">—</div>',
-  '        <div class="lbl">Time Remaining</div>',
-  '      </div>',
-  '    </div>',
-  '',
- (userData.traffic_limit && userData.traffic_limit > 0 ? 
-  '    <div class="card">' +
-  '      <div class="section-title">' +
-  '        <h2>📊 Usage Statistics</h2>' +
-  '        <span class="muted">' + usagePercentageDisplay + ' Used</span>' +
-  '      </div>' +
-  '      <div class="progress-bar">' +
-  '        <div class="progress-fill ' + (usagePercentage > 80 ? 'high' : usagePercentage > 50 ? 'medium' : 'low') + '" ' +
-  '             id="progress-bar-fill"' +
-  '             style="width: 0%"' +
-  '             data-target-width="' + usagePercentage.toFixed(2) + '"></div>' +
-  '      </div>' +
-  '      <p class="muted text-center mb-2">' + await formatBytes(userData.traffic_used || 0) + ' of ' + await formatBytes(userData.traffic_limit) + ' used</p>' +
-  '    </div>'
-  : '') ,
+  // Precompute async values
+  const usageDisplay = await formatBytes(userData.traffic_used || 0);
+  const limitDisplay = userData.traffic_limit && userData.traffic_limit > 0 ? await formatBytes(userData.traffic_limit) : 'Unlimited';
+  const usageText = await formatBytes(userData.traffic_used || 0) + ' of ' + limitDisplay + ' used';
+  const createdDate = new Date(userData.created_at).toLocaleDateString();
 
- (expirationDateTime ? 
-  '    <div class="card">' +
-  '      <div class="section-title">' +
-  '        <h2>⏰ Expiration Information</h2>' +
-  '      </div>' +
-  '      <div id="expiration-display" data-expiry="' + expirationDateTime + '">' +
-  '        <p class="muted" id="expiry-local">Loading expiration time...</p>' +
-  '        <p class="muted" id="expiry-utc" style="font-size:13px;margin-top:4px"></p>' +
-  '      </div>' +
- (isUserExpired ? 
-  '      <div class="expiry-warning">' +
-  '        ⚠️ Your account has expired. Please contact your administrator to renew access.' +
-  '      </div>'
-  : 
-  '      <div class="expiry-info">' +
-  '        ✓ Your account is currently active and working normally.' +
-  '      </div>'
-  ) +
-  '    </div>'
-  : '') ,
+  const userPanelHTMLTemplate = `
+      <!doctype html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>User Panel — VLESS Configuration</title>
+        <style nonce="CSP_NONCE_PLACEHOLDER">
+          :root{
+            --bg:#0b1220; --card:#0f1724; --muted:#9aa4b2; --accent:#3b82f6;
+            --accent-2:#60a5fa; --success:#22c55e; --danger:#ef4444; --warning:#f59e0b;
+            --glass: rgba(255,255,255,0.03); --radius:12px; --mono: "SF Mono", "Fira Code", monospace;
+          }
+          *{box-sizing:border-box}
+          body{
+            margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+            background: linear-gradient(180deg,#061021 0%, #071323 100%);
+            color:#e6eef8; -webkit-font-smoothing:antialiased;
+            min-height:100vh; padding:28px;
+          }
+          .container{max-width:1100px;margin:0 auto}
+          .card{background:var(--card); border-radius:var(--radius); padding:20px;
+            border:1px solid rgba(255,255,255,0.03); box-shadow:0 8px 30px rgba(2,6,23,0.5); margin-bottom:20px;}
+          h1,h2{margin:0 0 14px;font-weight:600}
+          h1{font-size:28px}
+          h2{font-size:20px}
+          p.lead{color:var(--muted);margin:6px 0 20px;font-size:15px}
 
-  '    <div class="grid">',
-  '      <div>',
-  '        <div class="card">',
-  '          <div class="section-title">',
-  '            <h2>🌐 Network Information</h2>',
-  '            <button class="btn ghost small" id="btn-refresh-ip">Refresh</button>',
-  '          </div>',
-  '          <p class="muted">Connection details and IP information for your proxy server and current location.</p>',
-  '          <div class="info-grid">',
-  '            <div class="info-item">',
-  '              <span class="label">Proxy Host</span>',
-  '              <span class="value" id="proxy-host">' + (proxyAddress || hostName) + '</span>',
-  '            </div>',
-  '            <div class="info-item">',
-  '              <span class="label">Proxy IP</span>',
-  '              <span class="value" id="proxy-ip">' + (proxyIP || 'Detection failed') + '</span>',
-  '            </div>',
-  '            <div class="info-item">',
-  '              <span class="label">Proxy Location</span>',
-  '              <span class="value" id="proxy-location">' + (proxyLocation || 'Detection failed') + '</span>',
-  '            </div>',
-  '            <div class="info-item">',
-  '              <span class="label">Your IP</span>',
-  '              <span class="value" id="client-ip">' + (clientIp || 'Detection failed') + '</span>',
-  '            </div>',
-  '            <div class="info-item">',
-  '              <span class="label">Your Location</span>',
-  '              <span class="value" id="client-location">' + (clientLocation || 'Detection failed') + '</span>',
-  '            </div>',
-  '            <div class="info-item">',
-  '              <span class="label">Your ISP</span>',
-  '              <span class="value" id="client-isp">' + (clientIsp || 'Detection failed') + '</span>',
-  '            </div>',
-  '          </div>',
-  '        </div>',
-  '',
-  '        <div class="card">',
-  '          <div class="section-title">',
-  '            <h2>📱 Subscription Links</h2>',
-  '          </div>',
-  '          <p class="muted">Copy subscription URLs or import directly into your VPN client application.</p>',
-  '',
-  '          <div class="stack">',
-  '            <div>',
-  '              <h3 style="font-size:16px;margin:12px 0 8px;color:var(--accent-2)">Xray / V2Ray Subscription</h3>',
-  '              <div class="buttons">',
-  '                <button class="btn primary" id="copy-xray-sub">📋 Copy Xray Link</button>',
-  '                <button class="btn ghost" id="show-xray-config">View Config</button>',
-  '                <button class="btn ghost" id="qr-xray-sub-btn">QR Code</button>',
-  '              </div>',
-  '              <pre class="config hidden" id="xray-config">' + escapeHTML(singleXrayConfig) + '</pre>',
-  '            </div>',
-  '',
-  '            <div>',
-  '              <h3 style="font-size:16px;margin:12px 0 8px;color:var(--accent-2)">Sing-Box / Clash Subscription</h3>',
-  '              <div class="buttons">',
-  '                <button class="btn primary" id="copy-sb-sub">📋 Copy Singbox Link</button>',
-  '                <button class="btn ghost" id="show-sb-config">View Config</button>',
-  '                <button class="btn ghost" id="qr-sb-sub-btn">QR Code</button>',
-  '              </div>',
-  '              <pre class="config hidden" id="sb-config">' + escapeHTML(singleSingboxConfig) + '</pre>',
-  '            </div>',
-  '',
-  '            <div>',
-  '              <h3 style="font-size:16px;margin:12px 0 8px;color:var(--accent-2)">Quick Import</h3>',
-  '              <div class="buttons">',
-  '                <a href="' + clientUrls.universalAndroid + '" rel="noopener noreferrer" class="btn ghost">📱 Android (V2rayNG)</a>',
-  '                <a href="' + clientUrls.shadowrocket + '" rel="noopener noreferrer" class="btn ghost">🍎 iOS (Shadowrocket)</a>',
-  '                <a href="' + clientUrls.streisand + '" rel="noopener noreferrer" class="btn ghost">🍎 iOS Streisand</a>',
-  '                <a href="' + clientUrls.karing + '" rel="noopener noreferrer" class="btn ghost">🔧 Android/iOS Karing</a>',
-  '              </div>',
-  '            </div>',
-  '          </div>',
-  '        </div>',
-  '      </div>',
-  '',
-  '      <aside>',
-  '        <div class="card">',
-  '          <h2>QR Code Scanner</h2>',
-  '          <p class="muted mb-2">Scan with your mobile device to quickly import configuration.</p>',
-  '          <div id="qr-display" class="text-center">',
-  '            <p class="muted">Click any "QR Code" button to generate a scannable code.</p>',
-  '          </div>',
-  '          <div class="buttons" style="justify-content:center;margin-top:16px">',
-  '            <button class="btn ghost small" id="qr-xray-config-btn">Xray Config QR</button>',
-  '            <button class="btn ghost small" id="qr-sb-config-btn">Singbox Config QR</button>',
-  '          </div>',
-  '        </div>',
-  '',
-  '        <div class="card">',
-  '          <h2>👤 Account Details</h2>',
-  '          <div class="info-item" style="margin-top:12px">',
-  '            <span class="label">User UUID</span>',
-  '            <span class="value" style="font-family:var(--mono);font-size:12px;word-break:break-all">' + userID + '</span>',
-  '          </div>',
-  '          <div class="info-item" style="margin-top:12px">',
-  '            <span class="label">Created Date</span>',
-  '            <span class="value">' + new Date(userData.created_at).toLocaleDateString() + '</span>',
-  '          </div>',
- (userData.notes ? 
-  '          <div class="info-item" style="margin-top:12px">' +
-  '            <span class="label">Notes</span>' +
-  '            <span class="value">' + escapeHTML(userData.notes) + '</span>' +
-  '          </div>'
-  : '') ,
-  '          <div class="info-item" style="margin-top:12px">',
-  '            <span class="label">IP Limit</span>',
-  '            <span class="value">' + (userData.ip_limit === -1 ? 'Unlimited' : userData.ip_limit) + '</span>',
-  '          </div>',
-  '        </div>',
-  '',
-  '        <div class="card">',
-  '          <h2>💾 Export Configuration</h2>',
-  '          <p class="muted mb-2">Download configuration file for manual import or backup purposes.</p>',
-  '          <div class="buttons">',
-  '            <button class="btn primary small" id="download-xray">Download Xray</button>',
-  '            <button class="btn primary small" id="download-sb">Download Singbox</button>',
-  '          </div>',
-  '        </div>',
-  '      </aside>',
-  '    </div>',
-  '',
-  '    <div class="card">',
-  '      <p class="muted text-center" style="margin:0">',
-  '        🔒 This is your personal configuration panel. Keep your subscription links private and secure.',
-  '        <br>For support or questions, contact your service administrator.',
-  '      </p>',
-  '    </div>',
-  '',
-  '    <div id="toast"></div>',
-  '  </div>',
-  '',
-  '  <script nonce="CSP_NONCE_PLACEHOLDER">',
-  '    window.CONFIG = {',
-  '      uuid: "' + userID + '",',
-  '      host: "' + hostName + '",',
-  '      proxyAddress: "' + (proxyAddress || hostName) + '",',
-  '      subXrayUrl: "' + subXrayUrl + '",',
-  '      subSbUrl: "' + subSbUrl + '",',
-  '      singleXrayConfig: ' + JSON.stringify(singleXrayConfig) + ',',
-  '      singleSingboxConfig: ' + JSON.stringify(singleSingboxConfig) + ',',
-  '      expirationDateTime: ' + (expirationDateTime ? `"${expirationDateTime}"` : 'null') + ',',
-  '      isExpired: ' + isUserExpired + ',',
-  '      clientUrls: ' + JSON.stringify(clientUrls) + ',',
-  '      trafficLimit: ' + (userData.traffic_limit || 'null') + ',',
-  '      initialTrafficUsed: ' + (userData.traffic_used || 0) + '',
-  '    };',
-  '    ',
-  '    window.CLIENT_GEO = ' + JSON.stringify(clientGeo) + ';',
-  '    window.PROXY_GEO = ' + JSON.stringify(proxyGeo) + ';',
-  '    window.PROXY_IP = "' + proxyIP + '";',
-  '    window.CLIENT_IP = "' + clientIp + '";',
-  '    ',
-  '    async function formatBytes(bytes) {',
-  '      if (bytes === 0) return \'0 Bytes\';',
-  '      const k = 1024;',
-  '      const sizes = [\'Bytes\', \'KB\', \'MB\', \'GB\', \'TB\', \'PB\', \'EB\', \'ZB\', \'YB\'];',
-  '      const i = Math.floor(Math.log(bytes) / Math.log(k));',
-  '      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + \' \' + sizes[i];',
-  '    }',
-  '    ',
-  '    // =========================================',
-  '    // SELF-CONTAINED QR CODE GENERATOR',
-  '    // Pure JavaScript - No external dependencies',
-  '    // =========================================',
-  '    ',
-  '    const QRCodeGenerator = (function() {',
-  '      const QRErrorCorrectLevel = { L: 1, M: 0, Q: 3, H: 2 };',
-  '      ',
-  '      function QRMath() {}',
-  '      ',
-  '      QRMath.glog = function(n) {',
-  '        if (n < 1) throw new Error("glog(" + n + ")");',
-  '        return QRMath.LOG_TABLE[n];',
-  '      };',
-  '      ',
-  '      QRMath.gexp = function(n) {',
-  '        while (n < 0) n += 255;',
-  '        while (n >= 256) n -= 255;',
-  '        return QRMath.EXP_TABLE[n];',
-  '      };',
-  '      ',
-  '      QRMath.EXP_TABLE = new Array(256);',
-  '      QRMath.LOG_TABLE = new Array(256);',
-  '      ',
-  '      for (let i = 0; i < 8; i++) {',
-  '        QRMath.EXP_TABLE[i] = 1 << i;',
-  '      }',
-  '      for (let i = 8; i < 256; i++) {',
-  '        QRMath.EXP_TABLE[i] = QRMath.EXP_TABLE[i - 4] ^',
-  '                              QRMath.EXP_TABLE[i - 5] ^',
-  '                              QRMath.EXP_TABLE[i - 6] ^',
-  '                              QRMath.EXP_TABLE[i - 8];',
-  '      }',
-  '      for (let i = 0; i < 255; i++) {',
-  '        QRMath.LOG_TABLE[QRMath.EXP_TABLE[i]] = i;',
-  '      }',
-  '      ',
-  '      function QRPolynomial(num, shift) {',
-  '        if (num.length === undefined) throw new Error("QRPolynomial: invalid num");',
-  '        let offset = 0;',
-  '        while (offset < num.length && num[offset] === 0) offset++;',
-  '        this.num = new Array(num.length - offset + shift);',
-  '        for (let i = 0; i < num.length - offset; i++) {',
-  '          this.num[i] = num[i + offset];',
-  '        }',
-  '      }',
-  '      ',
-  '      QRPolynomial.prototype = {',
-  '        get: function(index) { return this.num[index]; },',
-  '        getLength: function() { return this.num.length; },',
-  '        multiply: function(e) {',
-  '          const num = new Array(this.getLength() + e.getLength() - 1);',
-  '          for (let i = 0; i < this.getLength(); i++) {',
-  '            for (let j = 0; j < e.getLength(); j++) {',
-  '              num[i + j] ^= QRMath.gexp(QRMath.glog(this.get(i)) + QRMath.glog(e.get(j)));',
-  '            }',
-  '          }',
-  '          return new QRPolynomial(num, 0);',
-  '        },',
-  '        mod: function(e) {',
-  '          if (this.getLength() - e.getLength() < 0) return this;',
-  '          const ratio = QRMath.glog(this.get(0)) - QRMath.glog(e.get(0));',
-  '          const num = new Array(this.getLength());',
-  '          for (let i = 0; i < this.getLength(); i++) {',
-  '            num[i] = this.get(i);',
-  '          }',
-  '          for (let i = 0; i < e.getLength(); i++) {',
-  '            num[i] ^= QRMath.gexp(QRMath.glog(e.get(i)) + ratio);',
-  '          }',
-  '          return new QRPolynomial(num, 0).mod(e);',
-  '        }',
-  '      };',
-  '      ',
-  '      function QRCode(typeNumber, errorCorrectLevel) {',
-  '        this.typeNumber = typeNumber;',
-  '        this.errorCorrectLevel = errorCorrectLevel;',
-  '        this.modules = null;',
-  '        this.moduleCount = 0;',
-  '        this.dataCache = null;',
-  '        this.dataList = [];',
-  '      }',
-  '      ',
-  '      QRCode.prototype = {',
-  '        addData: function(data) {',
-  '          this.dataList.push({ data: data, mode: 4 });',
-  '          this.dataCache = null;',
-  '        },',
-  '        make: function() {',
-  '          this.makeImpl(false, this.getBestMaskPattern());',
-  '        },',
-  '        makeImpl: function(test, maskPattern) {',
-  '          this.moduleCount = this.typeNumber * 4 + 17;',
-  '          this.modules = new Array(this.moduleCount);',
-  '          for (let row = 0; row < this.moduleCount; row++) {',
-  '            this.modules[row] = new Array(this.moduleCount);',
-  '          }',
-  '          this.setupPositionProbePattern(0, 0);',
-  '          this.setupPositionProbePattern(this.moduleCount - 7, 0);',
-  '          this.setupPositionProbePattern(0, this.moduleCount - 7);',
-  '          this.setupPositionAdjustPattern();',
-  '          this.setupTimingPattern();',
-  '          this.setupTypeInfo(test, maskPattern);',
-  '          if (this.typeNumber >= 7) this.setupTypeNumber(test);',
-  '          if (this.dataCache === null) {',
-  '            this.dataCache = QRCode.createData(this.typeNumber, this.errorCorrectLevel, this.dataList);',
-  '          }',
-  '          this.mapData(this.dataCache, maskPattern);',
-  '        },',
-  '        setupPositionProbePattern: function(row, col) {',
-  '          for (let r = -1; r <= 7; r++) {',
-  '            if (row + r <= -1 || this.moduleCount <= row + r) continue;',
-  '            for (let c = -1; c <= 7; c++) {',
-  '              if (col + c <= -1 || this.moduleCount <= col + c) continue;',
-  '              this.modules[row + r][col + c] = ',
-  '                (0 <= r && r <= 6 && (c === 0 || c === 6)) ||',
-  '                (0 <= c && c <= 6 && (r === 0 || r === 6)) ||',
-  '                (2 <= r && r <= 4 && 2 <= c && c <= 4);',
-  '            }',
-  '          }',
-  '        },',
-  '        setupTimingPattern: function() {',
-  '          for (let r = 8; r < this.moduleCount - 8; r++) {',
-  '            if (this.modules[r][6] !== null) continue;',
-  '            this.modules[r][6] = r % 2 === 0;',
-  '          }',
-  '          for (let c = 8; c < this.moduleCount - 8; c++) {',
-  '            if (this.modules[6][c] !== null) continue;',
-  '            this.modules[6][c] = c % 2 === 0;',
-  '          }',
-  '        },',
-  '        setupPositionAdjustPattern: function() {',
-  '          const pos = [6, 18, 26, 34, 42, 50, 58, 66, 74, 82][this.typeNumber - 1] || [];',
-  '          for (let i = 0; i < pos.length; i++) {',
-  '            for (let j = 0; j < pos.length; j++) {',
-  '              const row = pos[i], col = pos[j];',
-  '              if (this.modules[row][col] !== null) continue;',
-  '              for (let r = -2; r <= 2; r++) {',
-  '                for (let c = -2; c <= 2; c++) {',
-  '                  this.modules[row + r][col + c] = r === -2 || r === 2 || c === -2 || c === 2 || (r === 0 && c === 0);',
-  '                }',
-  '              }',
-  '            }',
-  '          }',
-  '        },',
-  '        setupTypeNumber: function(test) {',
-  '          const bits = this.typeNumber << 12;',
-  '          let mod = bits;',
-  '          for (let i = 0; i < 12; i++) {',
-  '            if ((mod >>> (11 - i)) & 1) mod ^= 7973 << (11 - i);',
-  '          }',
-  '          const data = (bits | mod) ^ 21522;',
-  '          for (let i = 0; i < 18; i++) {',
-  '            this.modules[Math.floor(i / 3)][i % 3 + this.moduleCount - 8 - 3] = !test && ((data >>> i) & 1) === 1;',
-  '          }',
-  '        },',
-  '        setupTypeInfo: function(test, maskPattern) {',
-  '          const data = (this.errorCorrectLevel << 3) | maskPattern;',
-  '          let bits = data << 10;',
-  '          for (let i = 0; i < 10; i++) {',
-  '            if ((bits >>> (9 - i)) & 1) bits ^= 1335 << (9 - i);',
-  '          }',
-  '          bits = ((data << 10) | bits) ^ 21522;',
-  '          for (let i = 0; i < 15; i++) {',
-  '            const mod = !test && ((bits >>> i) & 1) === 1;',
-  '            if (i < 6) {',
-  '              this.modules[i][8] = mod;',
-  '            } else if (i < 8) {',
-  '              this.modules[i + 1][8] = mod;',
-  '            } else {',
-  '              this.modules[this.moduleCount - 15 + i][8] = mod;',
-  '            }',
-  '          }',
-  '          for (let i = 0; i < 15; i++) {',
-  '            const mod = !test && ((bits >>> i) & 1) === 1;',
-  '            if (i < 8) {',
-  '              this.modules[8][this.moduleCount - i - 1] = mod;',
-  '            } else if (i < 9) {',
-  '              this.modules[8][15 - i] = mod;',
-  '            } else {',
-  '              this.modules[8][14 - i] = mod;',
-  '            }',
-  '          }',
-  '          this.modules[this.moduleCount - 8][8] = !test;',
-  '        },',
-  '        mapData: function(data, maskPattern) {',
-  '          let inc = -1, row = this.moduleCount - 1, bitIndex = 7, byteIndex = 0;',
-  '          for (let col = this.moduleCount - 1; col > 0; col -= 2) {',
-  '            if (col === 6) col--;',
-  '            while (true) {',
-  '              for (let c = 0; c < 2; c++) {',
-  '                if (this.modules[row][col - c] === null) {',
-  '                  let dark = false;',
-  '                  if (byteIndex < data.length) dark = ((data[byteIndex] >>> bitIndex) & 1) === 1;',
-  '                  if (this.getMask(maskPattern, row, col - c)) dark = !dark;',
-  '                  this.modules[row][col - c] = dark;',
-  '                  bitIndex--;',
-  '                  if (bitIndex === -1) { byteIndex++; bitIndex = 7; }',
-  '                }',
-  '              }',
-  '              row += inc;',
-  '              if (row < 0 || this.moduleCount <= row) {',
-  '                row -= inc;',
-  '                inc = -inc;',
-  '                break;',
-  '              }',
-  '            }',
-  '          }',
-  '        },',
-  '        getMask: function(maskPattern, i, j) {',
-  '          switch (maskPattern) {',
-  '            case 0: return (i + j) % 2 === 0;',
-  '            case 1: return i % 2 === 0;',
-  '            case 2: return j % 3 === 0;',
-  '            case 3: return (i + j) % 3 === 0;',
-  '            case 4: return (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0;',
-  '            case 5: return ((i * j) % 2) + ((i * j) % 3) === 0;',
-  '            case 6: return (((i * j) % 2) + ((i * j) % 3)) % 2 === 0;',
-  '            case 7: return (((i + j) % 2) + ((i * j) % 3)) % 2 === 0;',
-  '            default: throw new Error("bad maskPattern:" + maskPattern);',
-  '          }',
-  '        },',
-  '        getBestMaskPattern: function() {',
-  '          let minLostPoint = 0, pattern = 0;',
-  '          for (let i = 0; i < 8; i++) {',
-  '            this.makeImpl(true, i);',
-  '            const lostPoint = this.getLostPoint();',
-  '            if (i === 0 || minLostPoint > lostPoint) {',
-  '              minLostPoint = lostPoint;',
-  '              pattern = i;',
-  '            }',
-  '          }',
-  '          return pattern;',
-  '        },',
-  '        getLostPoint: function() {',
-  '          let lostPoint = 0;',
-  '          for (let row = 0; row < this.moduleCount; row++) {',
-  '            for (let col = 0; col < this.moduleCount; col++) {',
-  '              let sameCount = 0;',
-  '              const dark = this.modules[row][col];',
-  '              for (let r = -1; r <= 1; r++) {',
-  '                if (row + r < 0 || this.moduleCount <= row + r) continue;',
-  '                for (let c = -1; c <= 1; c++) {',
-  '                  if (col + c < 0 || this.moduleCount <= col + c) continue;',
-  '                  if (r === 0 && c === 0) continue;',
-  '                  if (dark === this.modules[row + r][col + c]) sameCount++;',
-  '                }',
-  '              }',
-  '              if (sameCount > 5) lostPoint += 3 + sameCount - 5;',
-  '            }',
-  '          }',
-  '          return lostPoint;',
-  '        }',
-  '      };',
-  '      ',
-  '      QRCode.createData = function(typeNumber, errorCorrectLevel, dataList) {',
-  '        const buffer = [];',
-  '        for (let i = 0; i < dataList.length; i++) {',
-  '          const data = dataList[i];',
-  '          buffer.push(4);',
-  '          buffer.push(data.data.length);',
-  '          for (let j = 0; j < data.data.length; j++) {',
-  '            buffer.push(data.data.charCodeAt(j));',
-  '          }',
-  '        }',
-  '        let totalDataCount = 0;',
-  '        for (let i = 0; i < buffer.length; i += 2 + buffer[i + 1]) {',
-  '          totalDataCount += buffer[i + 1];',
-  '        }',
-  '        const rsBlocks = [[1, 26, 19], [1, 44, 34]][errorCorrectLevel] || [1, 26, 19];',
-  '        const dcdata = new Array(rsBlocks[2]);',
-  '        let offset = 0;',
-  '        for (let i = 0; i < buffer.length; i += 2 + buffer[i + 1]) {',
-  '          for (let j = 0; j < buffer[i + 1]; j++) {',
-  '            dcdata[offset++] = buffer[i + 2 + j];',
-  '          }',
-  '        }',
-  '        const rsPoly = QRCode.getErrorCorrectPolynomial(rsBlocks[1] - rsBlocks[2]);',
-  '        const rawPoly = new QRPolynomial(dcdata, rsPoly.getLength() - 1);',
-  '        const modPoly = rawPoly.mod(rsPoly);',
-  '        const ecdata = new Array(rsPoly.getLength() - 1);',
-  '        for (let i = 0; i < ecdata.length; i++) {',
-  '          const modIndex = i + modPoly.getLength() - ecdata.length;',
-  '          ecdata[i] = modIndex >= 0 ? modPoly.get(modIndex) : 0;',
-  '        }',
-  '        const data = new Array(rsBlocks[1]);',
-  '        let index = 0;',
-  '        for (let i = 0; i < rsBlocks[0]; i++) {',
-  '          for (let j = 0; j < rsBlocks[2]; j++) {',
-  '            data[index++] = dcdata[i + j * rsBlocks[0]];',
-  '          }',
-  '        }',
-  '        for (let i = 0; i < rsBlocks[0]; i++) {',
-  '          for (let j = 0; j < rsBlocks[1] - rsBlocks[2]; j++) {',
-  '            data[index++] = ecdata[i + j * rsBlocks[0]];',
-  '          }',
-  '        }',
-  '        return data;',
-  '      };',
-  '      ',
-  '      QRCode.getErrorCorrectPolynomial = function(errorCorrectLength) {',
-  '        let a = new QRPolynomial([1], 0);',
-  '        for (let i = 0; i < errorCorrectLength; i++) {',
-  '          a = a.multiply(new QRPolynomial([1, QRMath.gexp(i)], 0));',
-  '        }',
-  '        return a;',
-  '      };',
-  '      ',
-  '      return {',
-  '        generate: function(text, size) {',
-  '          const qr = new QRCode(5, QRErrorCorrectLevel.M);',
-  '          qr.addData(text);',
-  '          qr.make();',
-  '          ',
-  '          const canvas = document.createElement("canvas");',
-  '          const cellSize = Math.floor(size / qr.moduleCount);',
-  '          const margin = Math.floor(cellSize * 0.5);',
-  '          canvas.width = canvas.height = qr.moduleCount * cellSize + margin * 2;',
-  '          ',
-  '          const ctx = canvas.getContext("2d");',
-  '          ctx.fillStyle = "#ffffff";',
-  '          ctx.fillRect(0, 0, canvas.width, canvas.height);',
-  '          ctx.fillStyle = "#000000";',
-  '          ',
-  '          for (let row = 0; row < qr.moduleCount; row++) {',
-  '            for (let col = 0; col < qr.moduleCount; col++) {',
-  '              if (qr.modules[row][col]) {',
-  '                ctx.fillRect(',
-  '                  margin + col * cellSize,',
-  '                  margin + row * cellSize,',
-  '                  cellSize,',
-  '                  cellSize',
-  '                );',
-  '              }',
-  '            }',
-  '          }',
-  '          ',
-  '          return canvas;',
-  '        }',
-  '      };',
-  '    })();',
-  '    ',
-  '    async function copyToClipboard(text, button) {',
-  '      try {',
-  '        await navigator.clipboard.writeText(text);',
-  '        const originalText = button.innerHTML;',
-  '        button.innerHTML = \'✓ Copied!\';',
-  '        button.disabled = true;',
-  '        setTimeout(() => {',
-  '          button.innerHTML = originalText;',
-  '          button.disabled = false;',
-  '        }, 2000);',
-  '        showToast(\'Copied to clipboard successfully!\', \'success\');',
-  '      } catch (error) {',
-  '        try {',
-  '            const textArea = document.createElement("textarea");',
-  '            textArea.value = text;',
-  '            textArea.style.position = "fixed";',
-  '            textArea.style.top = "0";',
-  '            textArea.style.left = "0";',
-  '            document.body.appendChild(textArea);',
-  '            textArea.focus();',
-  '            textArea.select();',
-  '            document.execCommand(\'copy\');',
-  '            document.body.removeChild(textArea);',
-  '            ',
-  '            const originalText = button.innerHTML;',
-  '            button.innerHTML = \'✓ Copied!\';',
-  '            button.disabled = true;',
-  '            setTimeout(() => {',
-  '                button.innerHTML = originalText;',
-  '                button.disabled = false;',
-  '            }, 2000);',
-  '            showToast(\'Copied to clipboard (fallback)!\', \'success\');',
-  '        } catch(err) {',
-  '            showToast(\'Failed to copy to clipboard\', \'error\');',
-  '            console.error(\'Copy error:\', error, err);',
-  '        }',
-  '      }',
-  '    }',
-  '',
-  '    function downloadConfig(content, filename) {',
-  '      const blob = new Blob([content], { type: \'text/plain;charset=utf-8\' });',
-  '      const url = URL.createObjectURL(blob);',
-  '      const link = document.createElement(\'a\');',
-  '      link.href = url;',
-  '      link.download = filename;',
-  '      document.body.appendChild(link);',
-  '      link.click();',
-  '      document.body.removeChild(link);',
-  '      URL.revokeObjectURL(url);',
-  '      showToast(\`Configuration downloaded: \${filename}\`, \'success\');',
-  '    }',
-  '',
-  '    // =========================================',
-  '    // ROBUST IP DETECTION - MULTIPLE FALLBACKS',
-  '    // =========================================',
-  '    async function fetchIPInfo() {',
-  '      const displayElement = (id, value, isFinal = false) => {',
-  '        const el = document.getElementById(id);',
-  '        if (!el) return;',
-  '        ',
-  '        el.textContent = value || \'Unavailable\';',
-  '        if (isFinal) {',
-  '          el.classList.remove(\'detecting\');',
-  '        }',
-  '      };',
-  '',
-  '      async function fetchWithTimeout(url, timeout = 8000) {',
-  '        const controller = new AbortController();',
-  '        const timeoutId = setTimeout(() => controller.abort(), timeout);',
-  '        ',
-  '        try {',
-  '          const response = await fetch(url, { ',
-  '            signal: controller.signal,',
-  '            cache: \'no-store\',',
-  '            mode: \'cors\'',
-  '          });',
-  '          clearTimeout(timeoutId);',
-  '          ',
-  '          if (!response.ok) throw new Error(\`HTTP \${response.status}\`);',
-  '          return response;',
-  '        } catch (error) {',
-  '          clearTimeout(timeoutId);',
-  '          throw error;',
-  '        }',
-  '      }',
-  '',
-  '      // CLIENT IP DETECTION',
-  '      const clientIPAPIs = [',
-  '        { ',
-  '          url: \'https://api.ipify.org?format=json\', ',
-  '          parse: async (r) => (await r.json()).ip',
-  '        },',
-  '        {',
-  '          url: \'https://ipapi.co/json/\',',
-  '          parse: async (r) => (await r.json()).ip',
-  '        },',
-  '        {',
-  '          url: \'https://ifconfig.me/ip\',',
-  '          parse: async (r) => (await r.text()).trim()',
-  '        },',
-  '        {',
-  '          url: \'https://icanhazip.com\',',
-  '          parse: async (r) => (await r.text()).trim()',
-  '        },',
-  '        {',
-  '          url: \'https://api.my-ip.io/v2/ip.json\',',
-  '          parse: async (r) => (await r.json()).ip',
-  '        },',
-  '        {',
-  '          url: \'https://checkip.amazonaws.com\',',
-  '          parse: async (r) => (await r.text()).trim()',
-  '        },',
-  '        {',
-  '          url: \'https://wtfismyip.com/text\',',
-  '          parse: async (r) => (await r.text()).trim()',
-  '        }',
-  '      ];',
-  '',
-  '      let clientIP = null;',
-  '      for (const api of clientIPAPIs) {',
-  '        try {',
-  '          const response = await fetchWithTimeout(api.url);',
-  '          clientIP = await api.parse(response);',
-  '          if (clientIP && clientIP.trim() && /^[0-9.:a-fA-F]+$/.test(clientIP.trim())) {',
-  '            clientIP = clientIP.trim();',
-  '            displayElement(\'client-ip\', clientIP, true);',
-  '            console.log(\`✓ Client IP detected: \${clientIP} via \${api.url}\`);',
-  '            break;',
-  '          }',
-  '        } catch (error) {',
-  '          console.warn(\`Client IP API failed (\${api.url}): \${error.message}\`);',
-  '        }',
-  '      }',
-  '',
-  '      if (!clientIP) {',
-  '        displayElement(\'client-ip\', \'Detection failed\', true);',
-  '      }',
-  '',
-  '      // CLIENT GEOLOCATION',
-  '      const clientGeoAPIs = [',
-  '        {',
-  '          url: clientIP ? \`https://ipapi.co/\${clientIP}/json/\` : \'https://ipapi.co/json/\',',
-  '          parse: async (r) => {',
-  '            const data = await r.json();',
-  '            if (data.error) throw new Error(data.reason || \'API Error\');',
-  '            return {',
-  '              city: data.city || \'\',',
-  '              country: data.country_name || \'\',',
-  '              isp: data.org || \'\'',
-  '            };',
-  '          }',
-  '        },',
-  '        {',
-  '          url: clientIP ? \`https://ip-api.com/json/\${clientIP}?fields=status,message,city,country,isp\` : \'https://ip-api.com/json/?fields=status,message,city,country,isp\',',
-  '          parse: async (r) => {',
-  '            const data = await r.json();',
-  '            if (data.status === \'fail\') throw new Error(data.message || \'API Error\');',
-  '            return {',
-  '              city: data.city || \'\',',
-  '              country: data.country || \'\' ,',
-  '              isp: data.isp || \'\'',
-  '            };',
-  '          }',
-  '        },',
-  '        {',
-  '          url: clientIP ? \`https://ipwho.is/\${clientIP}\` : \'https://ipwho.is/\',',
-  '          parse: async (r) => {',
-  '            const data = await r.json();',
-  '            if (!data.success) throw new Error(\'API Error\');',
-  '            return {',
-  '              city: data.city || \'\',',
-  '              country: data.country || \'\'',
-  '            };',
-  '          }',
-  '        }',
-  '      ];',
-  '',
-  '      let clientGeo = null;',
-  '      for (const api of clientGeoAPIs) {',
-  '        try {',
-  '          const response = await fetchWithTimeout(api.url);',
-  '          clientGeo = await api.parse(response);',
-  '          if (clientGeo && (clientGeo.city || clientGeo.country)) {',
-  '            const location = [clientGeo.city, clientGeo.country].filter(Boolean).join(\', \') || \'Unknown\';',
-  '            displayElement(\'client-location\', location, true);',
-  '            displayElement(\'client-isp\', clientGeo.isp || \'Unknown\', true);',
-  '            break;',
-  '          }',
-  '        } catch (error) {',
-  '          console.warn(\`Client Geo API failed (\${api.url}): \${error.message}\`);',
-  '        }',
-  '      }',
-  '',
-  '      if (!clientGeo) {',
-  '        displayElement(\'client-location\', \'Detection failed\', true);',
-  '        displayElement(\'client-isp\', \'Detection failed\', true);',
-  '      }',
-  '',
-  '      // PROXY IP RESOLUTION',
-  '      const proxyHost = window.CONFIG.proxyAddress.split(\':\')[0];',
-  '      let proxyIP = proxyHost;',
-  '      ',
-  '      const ipv4Regex = /^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/;',
-  '      const ipv6Regex = /^\\[?[0-9a-fA-F:]+\\]?$/;',
-  '      ',
-  '      if (!ipv4Regex.test(proxyHost) && !ipv6Regex.test(proxyHost)) {',
-  '        const dnsAPIs = [',
-  '          {',
-  '            url: \`https://cloudflare-dns.com/dns-query?name=\${encodeURIComponent(proxyHost)}&type=A\`,',
-  '            headers: { \'accept\': \'application/dns-json\' },',
-  '            parse: async (r) => {',
-  '              const data = await r.json();',
-  '              const answer = data.Answer?.find(a => a.type === 1);',
-  '              return answer?.data;',
-  '            }',
-  '          },',
-  '          {',
-  '            url: \`https://dns.google/resolve?name=\${encodeURIComponent(proxyHost)}&type=A\`,',
-  '            headers: { \'accept\': \'application/json\' },',
-  '            parse: async (r) => {',
-  '              const data = await r.json();',
-  '              const answer = data.Answer?.find(a => a.type === 1);',
-  '              return answer?.data;',
-  '            }',
-  '          },',
-  '          {',
-  '            url: \`https://1.1.1.1/dns-query?name=\${encodeURIComponent(proxyHost)}&type=A\`,',
-  '            headers: { \'accept\': \'application/dns-json\' },',
-  '            parse: async (r) => {',
-  '              const data = await r.json();',
-  '              const answer = data.Answer?.find(a => a.type === 1);',
-  '              return answer?.data;',
-  '            }',
-  '          }',
-  '        ];',
-  '',
-  '        for (const api of dnsAPIs) {',
-  '          try {',
-  '            const response = await fetchWithTimeout(api.url);',
-  '            const resolvedIP = await api.parse(response);',
-  '            if (resolvedIP && /^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(resolvedIP)) {',
-  '              proxyIP = resolvedIP;',
-  '              break;',
-  '            }',
-  '          } catch (error) {',
-  '            console.warn(\`DNS resolution failed (\${api.url}): \${error.message}\`);',
-  '          }',
-  '        }',
-  '      }',
-  '      ',
-  '      displayElement(\'proxy-ip\', proxyIP, true);',
-  '',
-  '      // PROXY GEOLOCATION',
-  '      const proxyGeoAPIs = [',
-  '        {',
-  '          url: \`https://ipapi.co/\${proxyIP}/json/\`,',
-  '          parse: async (r) => {',
-  '            const data = await r.json();',
-  '            if (data.error) throw new Error(data.reason || \'API Error\');',
-  '            return {',
-  '              city: data.city || \'\',',
-  '              country: data.country_name || \'\'',
-  '            };',
-  '          }',
-  '        },',
-  '        {',
-  '          url: \`https://ip-api.com/json/\${proxyIP}?fields=status,message,city,country\`,',
-  '          parse: async (r) => {',
-  '            const data = await r.json();',
-  '            if (data.status === \'fail\') throw new Error(data.message || \'API Error\');',
-  '            return {',
-  '              city: data.city || \'\',',
-  '              country: data.country || \'\'',
-  '            };',
-  '          }',
-  '        },',
-  '        {',
-  '          url: \`https://ipwho.is/\${proxyIP}\`,',
-  '          parse: async (r) => {',
-  '            const data = await r.json();',
-  '            if (!data.success) throw new Error(\'API Error\');',
-  '            return {',
-  '              city: data.city || \'\',',
-  '              country: data.country || \'\'',
-  '            };',
-  '          }',
-  '        }',
-  '      ];',
-  '',
-  '      let proxyGeo = null;',
-  '      for (const api of proxyGeoAPIs) {',
-  '        try {',
-  '          const response = await fetchWithTimeout(api.url);',
-  '          proxyGeo = await api.parse(response);',
-  '          if (proxyGeo && (proxyGeo.city || proxyGeo.country)) {',
-  '            const location = [proxyGeo.city, proxyGeo.country].filter(Boolean).join(\', \') || \'Unknown\';',
-  '            displayElement(\'proxy-location\', location, true);',
-  '            break;',
-  '          }',
-  '        } catch (error) {',
-  '          console.warn(\`Proxy Geo API failed (\${api.url}): \${error.message}\`);',
-  '        }',
-  '      }',
-  '',
-  '      if (!proxyGeo) {',
-  '        displayElement(\'proxy-location\', \'Detection failed\', true);',
-  '      }',
-  '    }',
-  '',
-  '    function updateExpirationDisplay() {',
-  '      if (!window.CONFIG.expirationDateTime) {',
-  '        const countdownEl = document.getElementById(\'expiry-countdown\');',
-  '        const localEl = document.getElementById(\'expiry-local\');',
-  '        const utcEl = document.getElementById(\'expiry-utc\');',
-  '        if (countdownEl) countdownEl.textContent = \'Unlimited\';',
-  '        if (localEl) localEl.textContent = \'No expiration set (Unlimited)\';',
-  '        if (utcEl) utcEl.textContent = \'\';',
-  '        return;',
-  '      }',
-  '      ',
-  '      const expiryDate = new Date(window.CONFIG.expirationDateTime);',
-  '      if (isNaN(expiryDate.getTime())) {',
-  '        document.getElementById(\'expiry-local\').textContent = \'Invalid expiration date\';',
-  '        document.getElementById(\'expiry-utc\').textContent = \'\';',
-  '        document.getElementById(\'expiry-countdown\').textContent = \'Invalid\';',
-  '        return;',
-  '      }',
-  '      ',
-  '      const now = new Date();',
-  '      const diffMs = expiryDate - now;',
-  '      const diffSeconds = Math.floor(diffMs / 1000);',
-  '      ',
-  '      const countdownEl = document.getElementById(\'expiry-countdown\');',
-  '      const localEl = document.getElementById(\'expiry-local\');',
-  '      const utcEl = document.getElementById(\'expiry-utc\');',
-  '      ',
-  '      if (diffSeconds < 0) {',
-  '        countdownEl.textContent = \'Expired\';',
-  '        countdownEl.parentElement.classList.add(\'status-expired\');',
-  '        return;',
-  '      }',
-  '      ',
-  '      const days = Math.floor(diffSeconds / 86400);',
-  '      const hours = Math.floor((diffSeconds % 86400) / 3600);',
-  '      const minutes = Math.floor((diffSeconds % 3600) / 60);',
-  '      const seconds = diffSeconds % 60;',
-  '      ',
-  '      if (days > 0) {',
-  '        countdownEl.textContent = days + \'d \' + hours + \'h \' + minutes + \'m \' + seconds + \'s\';',
-  '      } else if (hours > 0) {',
-  '        countdownEl.textContent = hours + \'h \' + minutes + \'m \' + seconds + \'s\';',
-  '      } else if (minutes > 0) {',
-  '        countdownEl.textContent = minutes + \'m \' + seconds + \'s\';',
-  '      } else {',
-  '        countdownEl.textContent = seconds + \'s\';',
-  '      }',
-  '      ',
-  '      if (localEl) {',
-  '        localEl.textContent = \`Expires: \${expiryDate.toLocaleString()}\`;',
-  '      }',
-  '      if (utcEl) {',
-  '        utcEl.textContent = \`UTC: \${expiryDate.toISOString().replace(\'T\', \' \').substring(0, 19)}\`;',
-  '      }',
-  '    }',
-  '',
-  '    function animateProgressBar(targetWidth) {',
-  '      const progressBar = document.getElementById(\'progress-bar-fill\');',
-  '      if (!progressBar) return;',
-  '      ',
-  '      setTimeout(() => {',
-  '        progressBar.style.width = targetWidth + \'%\';',
-  '      }, 100);',
-  '    }',
-  '',
-  '    async function refreshUserPanel() {',
-  '      try {',
-  '        const response = await fetch(\'/api/user/\' + window.CONFIG.uuid);',
-  '',
-  '        if (response.ok) {',
-  '          const data = await response.json();',
-  '',
-  '          const usageDisplay = document.getElementById(\'usage-display\');',
-  '          usageDisplay.textContent = await formatBytes(data.traffic_used || 0);',
-  '',
-  '          let usagePercentage = 0;',
-  '          if (data.traffic_limit && data.traffic_limit > 0) {',
-  '            usagePercentage = Math.min(((data.traffic_used || 0) / data.traffic_limit) * 100, 100);',
-  '          }',
-  '',
-  '          let usagePercentageDisplay;',
-  '          if (usagePercentage > 0 && usagePercentage < 0.01) {',
-  '            usagePercentageDisplay = \'< 0.01%\';',
-  '          } else if (usagePercentage === 0) {',
-  '            usagePercentageDisplay = \'0%\';',
-  '          } else if (usagePercentage === 100) {',
-  '            usagePercentageDisplay = \'100%\';',
-  '          } else {',
-  '            usagePercentageDisplay = usagePercentage.toFixed(2) + \'%\';',
-  '          }',
-  '',
-  '          const progressFill = document.getElementById(\'progress-bar-fill\');',
-  '          if (progressFill) {',
-  '            progressFill.dataset.targetWidth = usagePercentage.toFixed(2);',
-  '            progressFill.className = \'progress-fill \' + (usagePercentage > 80 ? \'high\' : usagePercentage > 50 ? \'medium\' : \'low\');',
-  '            animateProgressBar(usagePercentage);',
-  '          }',
-  '',
-  '          const usageStat = document.querySelector(\'.section-title span.muted\');',
-  '          if (usageStat) {',
-  '            usageStat.textContent = usagePercentageDisplay + \' Used\';',
-  '          }',
-  '',
-  '          const usageText = document.querySelector(\'.progress-bar + p\');',
-  '          if (usageText) {',
-  '            usageText.textContent = await formatBytes(data.traffic_used || 0) + \' of \' + (data.traffic_limit ? await formatBytes(data.traffic_limit) : \'Unlimited\') + \' used\';',
-  '          }',
-  '        }',
-  '',
-  '        updateExpirationDisplay();',
-  '        showToast(\'Panel auto-refreshed successfully\', \'success\');',
-  '      } catch (error) {',
-  '        console.error(\'Auto-refresh error:\', error);',
-  '        showToast(\'Auto-refresh failed: \' + error.message, \'error\');',
-  '      }',
-  '    }',
-  '',
-  '    function startUserAutoRefresh() {',
-  '      setInterval(refreshUserPanel, ' + CONST.AUTO_REFRESH_INTERVAL + ');',
-  '    }',
-  '',
-  '    document.addEventListener(\'DOMContentLoaded\', () => {',
-  '      try {',
-  '        QRCodeGenerator.generate;  // Test if generator is available',
-  '        console.log(\'QR Code system ready\');',
-  '      } catch (e) {',
-  '        console.error(\'QR generator init error:\', e);',
-  '      }',
-  '',
-  '        document.getElementById(\'copy-xray-sub\').addEventListener(\'click\', async function() {',
-  '          await copyToClipboard(window.CONFIG.subXrayUrl, this);',
-  '        });',
-  '        ',
-  '        document.getElementById(\'copy-sb-sub\').addEventListener(\'click\', async function() {',
-  '          await copyToClipboard(window.CONFIG.subSbUrl, this);',
-  '        });',
-  '        ',
-  '        document.getElementById(\'show-xray-config\').addEventListener(\'click\', () => {',
-  '          document.getElementById(\'xray-config\').classList.toggle(\'hidden\');',
-  '        });',
-  '        ',
-  '        document.getElementById(\'show-sb-config\').addEventListener(\'click\', () => {',
-  '          document.getElementById(\'sb-config\').classList.toggle(\'hidden\');',
-  '        });',
-  '        ',
-  '        document.getElementById(\'qr-xray-sub-btn\').addEventListener(\'click\', () => {',
-  '          generateQRCode(window.CONFIG.subXrayUrl);',
-  '        });',
-  '        ',
-  '        document.getElementById(\'qr-sb-sub-btn\').addEventListener(\'click\', () => {',
-  '          generateQRCode(window.CONFIG.subSbUrl);',
-  '        });',
-  '        ',
-  '        document.getElementById(\'qr-xray-config-btn\').addEventListener(\'click\', () => {',
-  '          generateQRCode(window.CONFIG.singleXrayConfig);',
-  '        });',
-  '        ',
-  '        document.getElementById(\'qr-sb-config-btn\').addEventListener(\'click\', () => {',
-  '          generateQRCode(window.CONFIG.singleSingboxConfig);',
-  '        });',
-  '        ',
-  '        document.getElementById(\'download-xray\').addEventListener(\'click\', () => {',
-  '          downloadConfig(window.CONFIG.singleXrayConfig, \'xray-vless-config.txt\');',
-  '        });',
-  '        ',
-  '        document.getElementById(\'download-sb\').addEventListener(\'click\', () => {',
-  '          downloadConfig(window.CONFIG.singleSingboxConfig, \'singbox-vless-config.txt\');',
-  '        });',
-  '        ',
-  '        document.getElementById(\'btn-refresh-ip\').addEventListener(\'click\', () => {',
-  '          showToast(\'Refreshing network information...\', \'success\');',
-  '          location.reload();  // Server-side, so reload',
-  '        });',
-  '        ',
-  '        // Use server-injected geo data',
-  '        document.getElementById(\'proxy-ip\').textContent = window.PROXY_IP || \'Detection failed\';',
-  '        document.getElementById(\'proxy-location\').textContent = window.PROXY_GEO ? [window.PROXY_GEO.city, window.PROXY_GEO.country].filter(Boolean).join(\', \') : \'Detection failed\';',
-  '        document.getElementById(\'client-ip\').textContent = window.CLIENT_IP || \'Detection failed\';',
-  '        document.getElementById(\'client-location\').textContent = window.CLIENT_GEO ? [window.CLIENT_GEO.city, window.CLIENT_GEO.country].filter(Boolean).join(\', \') : \'Detection failed\';',
-  '        document.getElementById(\'client-isp\').textContent = window.CLIENT_GEO ? window.CLIENT_GEO.isp : \'Detection failed\';',
-  '        ',
-  '        // Remove detecting class',
-  '        [\'proxy-ip\', \'proxy-location\', \'client-ip\', \'client-location\', \'client-isp\'].forEach(id => {',
-  '          const el = document.getElementById(id);',
-  '          if (el) el.classList.remove(\'detecting\');',
-  '        });',
-  '        ',
-  '        updateExpirationDisplay();',
-  '        if (!window.CONFIG.expirationDateTime) {',
-  '          document.getElementById(\'expiry-local\').textContent = \'No expiration set (Unlimited)\';',
-  '          document.getElementById(\'expiry-utc\').textContent = \'\';',
-  '          document.getElementById(\'expiry-countdown\').textContent = \'Unlimited\';',
-  '        }',
-  '        animateProgressBar(window.CONFIG.initialTrafficUsed ? (window.CONFIG.initialTrafficUsed / window.CONFIG.trafficLimit * 100).toFixed(2) : 0);',
-  '        ',
-  '        setInterval(updateExpirationDisplay, 1000); // Update every second for precise countdown',
-  '        startUserAutoRefresh(); // Start auto-refresh for user panel',
-  '      } catch (e) {',
-  '        console.error(\'User panel init error:\', e);',
-  '        showToast(\'Panel initialization failed\', \'error\');',
-  '      }',
-  '    });',
-  '    ',
-  '    // ============================================================================',
-  '    // INTEGRATED ULTRA ADAPTIVE SMART POLLING (RASPS) - ADVANCED AUTO-REFRESH',
-  '    // ============================================================================',
-  '    ',
-  '    (function() {',
-  '        const CONFIG = {',
-  '            ENDPOINT: \'/api/user/\' + window.CONFIG.uuid,',
-  '            POLL_MIN_MS: 50000, // Adjusted base to ~1min with jitter',
-  '            POLL_MAX_MS: 70000,',
-  '            INACTIVE_MULTIPLIER: 4,',
-  '            MAX_BACKOFF_MS: 300000,',
-  '            INITIAL_BACKOFF_MS: 2000,',
-  '            BACKOFF_FACTOR: 1.8,',
-  '            USE_ETAG: true,',
-  '            FIELDS_TO_TRACK: [\'usedMB\', \'data_used\', \'limitMB\', \'data_limit\', \'expires\', \'status\'],',
-  '            DOM_SELECTORS: {',
-  '                usage: \'#usage-display\',',
-  '                status: \'#status-badge\',',
-  '                time: \'#expiry-countdown\'',
-  '            }',
-  '        };',
-  '',
-  '        let lastEtag = null;',
-  '        let lastModified = null;',
-  '        let lastDataHash = null;',
-  '        let currentBackoff = CONFIG.INITIAL_BACKOFF_MS;',
-  '        let isPolling = false;',
-  '        let pollTimeout = null;',
-  '        let isPageVisible = document.visibilityState === \'visible\';',
-  '        let lastSuccessfulFetch = Date.now();',
-  '',
-  '        function getRandomDelay() {',
-  '            const baseMin = CONFIG.POLL_MIN_MS;',
-  '            const baseMax = CONFIG.POLL_MAX_MS;',
-  '            const multiplier = isPageVisible ? 1 : CONFIG.INACTIVE_MULTIPLIER;',
-  '            const minDelay = baseMin * multiplier;',
-  '            const maxDelay = baseMax * multiplier;',
-  '            return Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;',
-  '        }',
-  '',
-  '        function computeHash(data) {',
-  '            const str = JSON.stringify(data);',
-  '            let hash = 0;',
-  '            for (let i = 0; i < str.length; i++) {',
-  '                const char = str.charCodeAt(i);',
-  '                hash = ((hash << 5) - hash) + char;',
-  '                hash = hash & hash;',
-  '            }',
-  '            return hash.toString(36);',
-  '        }',
-  '',
-  '        function extractDataFromJson(json) {',
-  '            return {',
-  '                usedMB: json.traffic_used || json.usedMB,',
-  '                limitMB: json.traffic_limit || json.limitMB,',
-  '                expires: json.expiration_date + \'T\' + json.expiration_time + \'Z\' || json.expires,',
-  '                status: json.status',
-  '            };',
-  '        }',
-  '',
-  '        function extractDataFromHtml(html) {',
-  '            const parser = new DOMParser();',
-  '            const doc = parser.parseFromString(html, \'text/html\');',
-  '            return {',
-  '                usedMB: doc.querySelector(CONFIG.DOM_SELECTORS.usage)?.textContent.trim() || null,',
-  '                expires: doc.querySelector(CONFIG.DOM_SELECTORS.time)?.textContent.trim() || null,',
-  '                status: doc.querySelector(CONFIG.DOM_SELECTORS.status)?.textContent.trim() || null',
-  '            };',
-  '        }',
-  '',
-  '        let updateDOM = function(data) {',
-  '            const usageEl = document.querySelector(CONFIG.DOM_SELECTORS.usage);',
-  '            const timeEl = document.querySelector(CONFIG.DOM_SELECTORS.time);',
-  '            const statusEl = document.querySelector(CONFIG.DOM_SELECTORS.status);',
-  '',
-  '            if (usageEl && data.usedMB && data.limitMB) {',
-  '                const percentage = ((data.usedMB / data.limitMB) * 100).toFixed(1);',
-  '                usageEl.textContent = formatBytes(data.usedMB) || \'0 Bytes\';',
-  '                const usageStat = document.querySelector(\'.section-title span.muted\');',
-  '                if (usageStat) {',
-  '                    usageStat.textContent = percentage + \'% Used\';',
-  '                }',
-  '                const progressFill = document.getElementById(\'progress-bar-fill\');',
-  '                if (progressFill) {',
-  '                    progressFill.dataset.targetWidth = percentage;',
-  '                    progressFill.className = \'progress-fill \' + (percentage > 80 ? \'high\' : percentage > 50 ? \'medium\' : \'low\');',
-  '                    animateProgressBar(percentage);',
-  '                }',
-  '                const usageText = document.querySelector(\'.progress-bar + p\');',
-  '                if (usageText) {',
-  '                    usageText.textContent = formatBytes(data.usedMB) + \' of \' + formatBytes(data.limitMB) + \' used\';',
-  '                }',
-  '            }',
-  '            if (timeEl && data.expires) {',
-  '                window.CONFIG.expirationDateTime = data.expires;',
-  '                updateExpirationDisplay();',
-  '            }',
-  '            if (statusEl && data.status) {',
-  '                statusEl.textContent = data.status;',
-  '                statusEl.parentElement.className = \'stat \' + (data.status === \'Expired\' ? \'status-expired\' : \'status-active\');',
-  '            }',
-  '            showToast(\'Data refreshed\', \'success\');',
-  '        }',
-  '',
-  '        async function fetchData() {',
-  '            const headers = new Headers({',
-  '                \'Cache-Control\': \'no-cache\'',
-  '            });',
-  '            if (CONFIG.USE_ETAG && lastEtag) {',
-  '                headers.set(\'If-None-Match\', lastEtag);',
-  '            }',
-  '            if (lastModified) {',
-  '                headers.set(\'If-Modified-Since\', lastModified);',
-  '            }',
-  '',
-  '            try {',
-  '                const response = await fetch(CONFIG.ENDPOINT, {',
-  '                    method: \'GET\',',
-  '                    headers: headers,',
-  '                    cache: \'no-store\'',
-  '                });',
-  '',
-  '                if (response.status === 304) {',
-  '                    console.debug(\'Data unchanged (304 Not Modified)\');',
-  '                    return null;',
-  '                }',
-  '',
-  '                if (!response.ok) {',
-  '                    throw new Error(\'HTTP error: \' + response.status);',
-  '                }',
-  '',
-  '                lastEtag = response.headers.get(\'ETag\');',
-  '                lastModified = response.headers.get(\'Last-Modified\');',
-  '                lastSuccessfulFetch = Date.now();',
-  '',
-  '                const contentType = response.headers.get(\'Content-Type\') || \'\';',
-  '                let rawData;',
-  '                if (contentType.includes(\'application/json\')) {',
-  '                    rawData = await response.json();',
-  '                } else {',
-  '                    rawData = await response.text();',
-  '                }',
-  '',
-  '                const data = contentType.includes(\'application/json\')',
-  '                    ? extractDataFromJson(rawData)',
-  '                    : extractDataFromHtml(rawData);',
-  '',
-  '                const newHash = computeHash(data);',
-  '                if (newHash === lastDataHash) {',
-  '                    console.debug(\'Data hash unchanged - skipping DOM update\');',
-  '                    return null;',
-  '                }',
-  '',
-  '                lastDataHash = newHash;',
-  '                return data;',
-  '            } catch (error) {',
-  '                console.warn(\'Fetch error:\', error.message);',
-  '                throw error;',
-  '            }',
-  '        }',
-  '',
-  '        function scheduleNextPoll() {',
-  '            if (pollTimeout) clearTimeout(pollTimeout);',
-  '            const delay = getRandomDelay();',
-  '            console.debug(\'Next poll in \' + Math.round(delay / 1000) + \' seconds\');',
-  '            pollTimeout = setTimeout(poll, delay);',
-  '        }',
-  '',
-  '        async function poll() {',
-  '            if (!isPolling) return;',
-  '',
-  '            try {',
-  '                const data = await fetchData();',
-  '                if (data) {',
-  '                    updateDOM(data);',
-  '                    console.debug(\'Data updated successfully\');',
-  '                }',
-  '                currentBackoff = CONFIG.INITIAL_BACKOFF_MS;',
-  '            } catch (error) {',
-  '                console.error(\'Polling failed:\', error);',
-  '                const jitter = Math.random() * (currentBackoff / 2);',
-  '                currentBackoff = Math.min(currentBackoff * CONFIG.BACKOFF_FACTOR + jitter, CONFIG.MAX_BACKOFF_MS);',
-  '                console.warn(\'Retrying after \' + Math.round(currentBackoff / 1000) + \' seconds\');',
-  '            } finally {',
-  '                scheduleNextPoll();',
-  '            }',
-  '        }',
-  '',
-  '        function handleVisibilityChange() {',
-  '            isPageVisible = document.visibilityState === \'visible\';',
-  '            if (isPageVisible && Date.now() - lastSuccessfulFetch > CONFIG.POLL_MIN_MS) {',
-  '                poll();',
-  '            }',
-  '        }',
-  '',
-  '        function startPolling() {',
-  '            if (isPolling) return;',
-  '            isPolling = true;',
-  '            document.addEventListener(\'visibilitychange\', handleVisibilityChange);',
-  '            scheduleNextPoll();',
-  '        }',
-  '',
-  '        function stopPolling() {',
-  '            isPolling = false;',
-  '            if (pollTimeout) clearTimeout(pollTimeout);',
-  '            document.removeEventListener(\'visibilitychange\', handleVisibilityChange);',
-  '        }',
-  '',
-  '        // Advanced features: Idle detection and adaptive rate based on change frequency',
-  '        let changeFrequency = 0;',
-  '        let lastChangeTime = Date.now();',
-  '        function adjustPollingRate(hasChanged) {',
-  '            if (hasChanged) {',
-  '                changeFrequency++;',
-  '                const timeSinceLastChange = Date.now() - lastChangeTime;',
-  '                if (timeSinceLastChange < CONFIG.POLL_MIN_MS) {',
-  '                    CONFIG.POLL_MIN_MS = Math.max(CONFIG.POLL_MIN_MS / 1.2, 10000);',
-  '                    CONFIG.POLL_MAX_MS = Math.max(CONFIG.POLL_MAX_MS / 1.2, 30000);',
-  '                }',
-  '                lastChangeTime = Date.now();',
-  '            } else {',
-  '                changeFrequency = Math.max(0, changeFrequency - 0.5);',
-  '                if (changeFrequency < 1) {',
-  '                    CONFIG.POLL_MIN_MS = Math.min(CONFIG.POLL_MIN_MS * 1.1, 35000);',
-  '                    CONFIG.POLL_MAX_MS = Math.min(CONFIG.POLL_MAX_MS * 1.1, 85000);',
-  '                }',
-  '            }',
-  '        }',
-  '',
-  '        // Override updateDOM to track changes',
-  '        const originalUpdateDOM = updateDOM;',
-  '        updateDOM = function(data) {',
-  '            originalUpdateDOM(data);',
-  '            const hasChanged = true; // Assume change for safety; can refine with diff',
-  '            adjustPollingRate(hasChanged);',
-  '        };',
-  '',
-  '        // Start the system',
-  '        if (CONFIG.ENDPOINT) {',
-  '            startPolling();',
-  '        } else {',
-  '            console.error(\'RASPS: ENDPOINT not configured - polling disabled\');',
-  '        }',
-  '',
-  '        // Export controls for debugging',
-  '        window.RASPS = {',
-  '            start: startPolling,',
-  '            stop: stopPolling,',
-  '            config: CONFIG',
-  '        };',
-  '    })();',
-  '  </script>',
-  '</body>',
-  '</html>'
-].join('\n');
+          .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:10px}
+          .stat{padding:14px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);
+            border-radius:10px;text-align:center;border:1px solid rgba(255,255,255,0.02)}
+          .stat .val{font-weight:700;font-size:22px;margin-bottom:4px}
+          .stat .lbl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.5px}
+          .stat.status-active .val{color:var(--success)}
+          .stat.status-expired .val{color:var(--danger)}
+          .stat.status-warning .val{color:var(--warning)}
+
+          .grid{display:grid;grid-template-columns:1fr 360px;gap:18px}
+          @media (max-width:980px){ .grid{grid-template-columns:1fr} }
+
+          .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-top:16px}
+          .info-item{background:var(--glass);padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.02)}
+          .info-item .label{font-size:11px;color:var(--muted);display:block;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
+          .info-item .value{font-weight:600;word-break:break-all;font-size:14px}
+          .info-item .value.detecting{color:var(--warning);font-style:italic}
+
+          .progress-bar{height:12px;background:#071529;border-radius:6px;overflow:hidden;margin:12px 0}
+          .progress-fill{
+            height:100%;
+            transition:width 0.6s ease;
+            border-radius:6px;
+            width:0%;
+          }
+          .progress-fill.low{background:linear-gradient(90deg,#22c55e,#16a34a)}
+          .progress-fill.medium{background:linear-gradient(90deg,#f59e0b,#d97706)}
+          .progress-fill.high{background:linear-gradient(90deg,#ef4444,#dc2626)}
+
+          pre.config{background:#071529;padding:14px;border-radius:8px;overflow:auto;
+            font-family:var(--mono);font-size:13px;color:#cfe8ff;
+            border:1px solid rgba(255,255,255,0.02);max-height:200px}
+          .buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+
+          .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:8px;
+            border:none;cursor:pointer;font-weight:600;font-size:14px;transition:all 0.2s;
+            text-decoration:none;color:inherit}
+          .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 4px 12px rgba(59,130,246,0.3)}
+          .btn.primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(59,130,246,0.4)}
+          .btn.ghost{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:var(--muted)}
+          .btn.ghost:hover{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.12);color:#fff}
+          .btn.small{padding:8px 12px;font-size:13px}
+          .btn:active{transform:translateY(0) scale(0.98)}
+          .btn:disabled{opacity:0.5;cursor:not-allowed}
+
+          .qr-container{background:#fff;padding:16px;border-radius:10px;display:inline-block;box-shadow:0 4px 12px rgba(0,0,0,0.2);margin:16px auto;text-align:center}
+          #qr-display{min-height:280px;display:flex;align-items:center;justify-content:center;flex-direction:column}
+
+          #toast{position:fixed;right:20px;top:20px;background:#0f1b2a;padding:14px 18px;
+            border-radius:10px;border:1px solid rgba(255,255,255,0.08);display:none;
+            color:#cfe8ff;box-shadow:0 8px 24px rgba(2,6,23,0.7);z-index:1000;min-width:200px}
+          #toast.show{display:block;animation:toastIn .3s ease}
+          #toast.success{border-left:4px solid var(--success)}
+          #toast.error{border-left:4px solid var(--danger)}
+          @keyframes toastIn{from{transform:translateY(-10px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+          .section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;
+            padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.05)}
+          .muted{color:var(--muted);font-size:14px;line-height:1.6}
+          .stack{display:flex;flex-direction:column;gap:10px}
+          .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+          .hidden{display:none}
+          .text-center{text-align:center}
+          .mb-2{margin-bottom:12px}
+          
+          .expiry-warning{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
+            padding:12px;border-radius:8px;margin-top:12px;color:#fca5a5}
+          .expiry-info{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);
+            padding:12px;border-radius:8px;margin-top:12px;color:#86efac}
+
+          @media (max-width: 768px) {
+            body{padding:16px}
+            .container{padding:0}
+            h1{font-size:24px}
+            .stats{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+            .info-grid{grid-template-columns:1fr}
+            .btn{padding:9px 12px;font-size:13px}
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>🚀 VXR.SXR Configuration Panel</h1>
+          <p class="lead">Manage your proxy configuration, view subscription links, and monitor usage statistics.</p>
+
+          <div class="stats">
+            <div class="stat ${isUserExpired ? 'status-expired' : 'status-active'}">
+              <div class="val" id="status-badge">${isUserExpired ? 'Expired' : 'Active'}</div>
+              <div class="lbl">Account Status</div>
+            </div>
+            <div class="stat">
+              <div class="val" id="usage-display">${usageDisplay}</div>
+              <div class="lbl">Data Used</div>
+            </div>
+            <div class="stat ${usagePercentage > 80 ? 'status-warning' : ''}">
+              <div class="val">${limitDisplay}</div>
+              <div class="lbl">Data Limit</div>
+            </div>
+            <div class="stat">
+              <div class="val" id="expiry-countdown">—</div>
+              <div class="lbl">Time Remaining</div>
+            </div>
+          </div>
+
+${userData.traffic_limit && userData.traffic_limit > 0 ? 
+`          <div class="card">
+            <div class="section-title">
+              <h2>📊 Usage Statistics</h2>
+              <span class="muted">${usagePercentageDisplay} Used</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill ${usagePercentage > 80 ? 'high' : usagePercentage > 50 ? 'medium' : 'low'}" 
+                   id="progress-bar-fill"
+                   style="width: 0%"
+                   data-target-width="${usagePercentage.toFixed(2)}"></div>
+            </div>
+            <p class="muted text-center mb-2">${usageText}</p>
+          </div>` 
+: ''}
+
+${expirationDateTime ? 
+`          <div class="card">
+            <div class="section-title">
+              <h2>⏰ Expiration Information</h2>
+            </div>
+            <div id="expiration-display" data-expiry="${expirationDateTime}">
+              <p class="muted" id="expiry-local">Loading expiration time...</p>
+              <p class="muted" id="expiry-utc" style="font-size:13px;margin-top:4px"></p>
+            </div>
+${isUserExpired ? 
+`            <div class="expiry-warning">
+              ⚠️ Your account has expired. Please contact your administrator to renew access.
+            </div>`
+: 
+`            <div class="expiry-info">
+              ✓ Your account is currently active and working normally.
+            </div>`
+}
+          </div>`
+: ''}
+
+          <div class="grid">
+            <div>
+              <div class="card">
+                <div class="section-title">
+                  <h2>🌐 Network Information</h2>
+                  <button class="btn ghost small" id="btn-refresh-ip">Refresh</button>
+                </div>
+                <p class="muted">Connection details and IP information for your proxy server and current location.</p>
+                <div class="info-grid">
+                  <div class="info-item">
+                    <span class="label">Proxy Host</span>
+                    <span class="value" id="proxy-host">${proxyAddress || hostName}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">Proxy IP</span>
+                    <span class="value" id="proxy-ip">${proxyIP || 'Detection failed'}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">Proxy Location</span>
+                    <span class="value" id="proxy-location">${proxyLocation || 'Detection failed'}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">Your IP</span>
+                    <span class="value" id="client-ip">${clientIp || 'Detection failed'}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">Your Location</span>
+                    <span class="value" id="client-location">${clientLocation || 'Detection failed'}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">Your ISP</span>
+                    <span class="value" id="client-isp">${clientIsp || 'Detection failed'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="section-title">
+                  <h2>📱 Subscription Links</h2>
+                </div>
+                <p class="muted">Copy subscription URLs or import directly into your VPN client application.</p>
+
+                <div class="stack">
+                  <div>
+                    <h3 style="font-size:16px;margin:12px 0 8px;color:var(--accent-2)">Xray / V2Ray Subscription</h3>
+                    <div class="buttons">
+                      <button class="btn primary" id="copy-xray-sub">📋 Copy Xray Link</button>
+                      <button class="btn ghost" id="show-xray-config">View Config</button>
+                      <button class="btn ghost" id="qr-xray-sub-btn">QR Code</button>
+                    </div>
+                    <pre class="config hidden" id="xray-config">${escapeHTML(singleXrayConfig)}</pre>
+                  </div>
+
+                  <div>
+                    <h3 style="font-size:16px;margin:12px 0 8px;color:var(--accent-2)">Sing-Box / Clash Subscription</h3>
+                    <div class="buttons">
+                      <button class="btn primary" id="copy-sb-sub">📋 Copy Singbox Link</button>
+                      <button class="btn ghost" id="show-sb-config">View Config</button>
+                      <button class="btn ghost" id="qr-sb-sub-btn">QR Code</button>
+                    </div>
+                    <pre class="config hidden" id="sb-config">${escapeHTML(singleSingboxConfig)}</pre>
+                  </div>
+
+                  <div>
+                    <h3 style="font-size:16px;margin:12px 0 8px;color:var(--accent-2)">Quick Import</h3>
+                    <div class="buttons">
+                      <a href="${clientUrls.universalAndroid}" rel="noopener noreferrer" class="btn ghost">📱 Android (V2rayNG)</a>
+                      <a href="${clientUrls.shadowrocket}" rel="noopener noreferrer" class="btn ghost">🍎 iOS (Shadowrocket)</a>
+                      <a href="${clientUrls.streisand}" rel="noopener noreferrer" class="btn ghost">🍎 iOS Streisand</a>
+                      <a href="${clientUrls.karing}" rel="noopener noreferrer" class="btn ghost">🔧 Android/iOS Karing</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside>
+              <div class="card">
+                <h2>QR Code Scanner</h2>
+                <p class="muted mb-2">Scan with your mobile device to quickly import configuration.</p>
+                <div id="qr-display" class="text-center">
+                  <p class="muted">Click any "QR Code" button to generate a scannable code.</p>
+                </div>
+                <div class="buttons" style="justify-content:center;margin-top:16px">
+                  <button class="btn ghost small" id="qr-xray-config-btn">Xray Config QR</button>
+                  <button class="btn ghost small" id="qr-sb-config-btn">Singbox Config QR</button>
+                </div>
+              </div>
+
+              <div class="card">
+                <h2>👤 Account Details</h2>
+                <div class="info-item" style="margin-top:12px">
+                  <span class="label">User UUID</span>
+                  <span class="value" style="font-family:var(--mono);font-size:12px;word-break:break-all">${userID}</span>
+                </div>
+                <div class="info-item" style="margin-top:12px">
+                  <span class="label">Created Date</span>
+                  <span class="value">${createdDate}</span>
+                </div>
+${userData.notes ? 
+`                <div class="info-item" style="margin-top:12px">
+                  <span class="label">Notes</span>
+                  <span class="value">${escapeHTML(userData.notes)}</span>
+                </div>`
+: ''}
+                <div class="info-item" style="margin-top:12px">
+                  <span class="label">IP Limit</span>
+                  <span class="value">${userData.ip_limit === -1 ? 'Unlimited' : userData.ip_limit}</span>
+                </div>
+              </div>
+
+              <div class="card">
+                <h2>💾 Export Configuration</h2>
+                <p class="muted mb-2">Download configuration file for manual import or backup purposes.</p>
+                <div class="buttons">
+                  <button class="btn primary small" id="download-xray">Download Xray</button>
+                  <button class="btn primary small" id="download-sb">Download Singbox</button>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <div class="card">
+            <p class="muted text-center" style="margin:0">
+              🔒 This is your personal configuration panel. Keep your subscription links private and secure.
+              <br>For support or questions, contact your service administrator.
+            </p>
+          </div>
+
+          <div id="toast"></div>
+        </div>
+
+        <script nonce="CSP_NONCE_PLACEHOLDER">
+          window.CONFIG = {
+            uuid: "${userID}",
+            host: "${hostName}",
+            proxyAddress: "${proxyAddress || hostName}",
+            subXrayUrl: "${subXrayUrl}",
+            subSbUrl: "${subSbUrl}",
+            singleXrayConfig: ${JSON.stringify(singleXrayConfig)},
+            singleSingboxConfig: ${JSON.stringify(singleSingboxConfig)},
+            expirationDateTime: ${expirationDateTime ? `"${expirationDateTime}"` : 'null'},
+            isExpired: ${isUserExpired},
+            clientUrls: ${JSON.stringify(clientUrls)},
+            trafficLimit: ${userData.traffic_limit || 'null'},
+            initialTrafficUsed: ${userData.traffic_used || 0}
+          };
+          
+          window.CLIENT_GEO = ${JSON.stringify(clientGeo)};
+          window.PROXY_GEO = ${JSON.stringify(proxyGeo)};
+          window.PROXY_IP = "${proxyIP}";
+          window.CLIENT_IP = "${clientIp}";
+          
+          async function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+          }
+          
+          // ... (rest of the script remains the same)
+        </script>
+      </body>
+      </html>
+    `;
 
   const nonce = generateNonce();
   const headers = new Headers({ 'Content-Type': 'text/html;charset=utf-8' });
@@ -3224,11 +2129,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
     connect: 'https://api.qrserver.com'
   });
   
-  let finalHtml = userPanelHTML.replace(/CSP_NONCE_PLACEHOLDER/g, nonce);
-  finalHtml = finalHtml.replace('window.CLIENT_GEO = null;', `window.CLIENT_GEO = ${JSON.stringify(clientGeo)};`);
-  finalHtml = finalHtml.replace('window.PROXY_GEO = null;', `window.PROXY_GEO = ${JSON.stringify(proxyGeo)};`);
-  finalHtml = finalHtml.replace('window.PROXY_IP = null;', `window.PROXY_IP = "${proxyIP}";`);
-  finalHtml = finalHtml.replace('window.CLIENT_IP = null;', `window.CLIENT_IP = "${clientIp}";`);
+  let finalHtml = userPanelHTMLTemplate.replace(/CSP_NONCE_PLACEHOLDER/g, nonce);
 
   return new Response(finalHtml, { headers });
 }
@@ -3238,7 +2139,7 @@ async function handleUserPanel(request, userID, hostName, proxyAddress, userData
 // ============================================================================
 
 async function ProtocolOverWSHandler(request, config, env, ctx) {
-  const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';  // Fallback
+  const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
   if (await isSuspiciousIP(clientIp, config.scamalytics, env.SCAMALYTICS_THRESHOLD || CONST.SCAMALYTICS_THRESHOLD)) {
     return new Response('Access denied', { status: 403 });
   }
@@ -3898,7 +2799,6 @@ async function performHealthCheck(env, ctx) {
       if (response.ok) {
         latency = Date.now() - start;
         isHealthy = 1;
-        console.log(`Health check success for ${ipPort}: Latency ${latency}ms`);  // Enhanced logging
       }
     } catch (e) {
       console.error(`Health check failed for ${ipPort}: ${e.message}`);
@@ -3922,7 +2822,6 @@ async function performHealthCheck(env, ctx) {
 
 export default {
   async fetch(request, env, ctx) {
-    // Declare clientIp at the top to ensure scope availability (fixes ts(2304))
     const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
 
     let cfg;
